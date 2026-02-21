@@ -42,7 +42,6 @@ jobs:
           cd dist/linux
           zip -r ../ocg-linux-x64.zip *
           cd ../..
-          rm -rf dist
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
