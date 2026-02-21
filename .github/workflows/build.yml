@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # 检查 Go 版本一致性
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Go version matches
+        run: |
+          MOD_VERSION=$(awk '/^go /{print $2; exit}' go.mod)
+          WORKFLOW_VERSION=$(awk -F"'" '/^[[:space:]]+go-version:/{print $2; exit}' .github/workflows/build.yml)
+          if [ "$MOD_VERSION" != "$WORKFLOW_VERSION" ]; then
+            echo "Go version mismatch: go.mod=$MOD_VERSION, workflow=$WORKFLOW_VERSION"
+            exit 1
+          fi
+          echo "Go version consistent: $MOD_VERSION"
+
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.4'
+      - name: Install deps (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libsqlite3-dev
+      - name: Build (no FAISS for CI)
+        run: |
+          go build -ldflags="-s -w -buildid=" -o bin/ocg ./cmd/ocg/
+          go build -ldflags="-s -w -buildid=" -o bin/ocg-gateway ./cmd/gateway/
+          go build -ldflags="-s -w -buildid=" -tags "sqlite_fts5" -o bin/ocg-agent ./cmd/agent/
+          go build -ldflags="-s -w -buildid=" -o bin/ocg-embedding ./cmd/embedding-server/
+      - name: Test
+        run: go test ./...

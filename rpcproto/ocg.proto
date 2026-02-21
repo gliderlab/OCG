@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+package ocg;
+
+option go_package = "github.com/gliderlab/cogate/rpcproto";
+
+service Agent {
+    rpc Chat (ChatArgs) returns (ChatReply);
+    rpc ChatStream (ChatArgs) returns (stream ChatStreamReply);
+    rpc Stats (StatsArgs) returns (StatsReply);
+    rpc Sessions (SessionsArgs) returns (SessionsReply);
+    rpc MemorySearch (MemorySearchArgs) returns (ToolResultReply);
+    rpc MemoryGet (MemoryGetArgs) returns (ToolResultReply);
+    rpc MemoryStore (MemoryStoreArgs) returns (ToolResultReply);
+    rpc PulseAdd (PulseArgs) returns (PulseReply);
+    rpc PulseStatus (PulseArgs) returns (PulseReply);
+    // Audio streaming
+    rpc SendAudioChunk (AudioChunkArgs) returns (AudioReply);
+    rpc EndAudioStream (AudioArgs) returns (AudioReply);
+}
+
+message Message {
+    string role = 1;
+    string content = 2;
+    repeated ToolCall tool_calls = 3;
+    repeated ToolResult tool_execution_results = 4;
+}
+
+message ToolCall {
+    string id = 1;
+    string type = 2;
+    Function function = 3;
+}
+
+message Function {
+    string name = 1;
+    string arguments = 2;
+}
+
+message ToolFunction {
+    string name = 1;
+    string description = 2;
+    string parameters = 3; // JSON schema
+}
+
+message Tool {
+    string type = 1;
+    ToolFunction function = 2;
+    string description = 3;
+}
+
+message ToolResult {
+    string id = 1;
+    string type = 2;
+    string result = 3;
+}
+
+message ChatArgs {
+    repeated Message messages = 1;
+    string session_key = 2;
+}
+
+message ChatReply {
+    string content = 1;
+    repeated ToolCall tools = 2;
+}
+
+message ChatStreamReply {
+    string content = 1;
+    bool done = 2;
+}
+
+message StatsArgs {}
+
+message StatsReply {
+    map<string, int32> stats = 1;
+}
+
+message SessionsArgs {
+    int32 limit = 1;
+}
+
+message SessionsReply {
+    repeated SessionInfo sessions = 1;
+    int32 count = 2;
+}
+
+message SessionInfo {
+    string session_key = 1;
+    int32 total_tokens = 2;
+    int32 compaction_count = 3;
+    string updated_at = 4;
+}
+
+message MemorySearchArgs {
+    string query = 1;
+    string category = 2;
+    int32 limit = 3;
+    float min_score = 4;
+}
+
+message MemoryGetArgs {
+    string path = 1;
+}
+
+message MemoryStoreArgs {
+    string text = 1;
+    string category = 2;
+    float importance = 3;
+}
+
+message ToolResultReply {
+    string result = 1;
+}
+
+message PulseArgs {
+    string action = 1;
+    string title = 2;
+    string content = 3;
+    int32 priority = 4;
+    string channel = 5;
+    int32 limit = 6;
+}
+
+message PulseReply {
+    string result = 1;
+    int64 event_id = 2;
+    string status = 3;
+}
+
+message AudioArgs {
+    string session_key = 1;
+}
+
+message AudioChunkArgs {
+    string session_key = 1;
+    bytes audio_data = 2;
+}
+
+message AudioReply {
+    string error = 1;
+}

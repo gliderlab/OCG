@@ -1,0 +1,54 @@
+name: Documentation Quality
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+  pull_request:
+    paths:
+      - 'docs/**'
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli
+
+      - name: Run Markdown lint
+        run: |
+          # Check for common issues
+          echo "=== Checking Markdown files ==="
+          
+          # Check for broken links syntax
+          echo "Checking for broken link syntax..."
+          grep -r '\]\(' docs/ | grep -v '.md)' || true
+          
+          # Check for unclosed brackets
+          echo "Checking for unclosed brackets..."
+          grep -r '\[.*[^\]]$' docs/ || true
+          
+          # Run markdownlint if available
+          which markdownlint && markdownlint docs/ || echo "markdownlint not available, skipping"
+
+      - name: Check Chinese text quality
+        run: |
+          # Check for common issues in Chinese docs
+          echo "=== Checking Chinese documentation ==="
+          
+          # Check for English punctuation in Chinese text
+          echo "Checking for English punctuation in Chinese docs..."
+          find docs -name "*-zh.md" -exec grep -l '\. *"' {} \; || true
+
+      - name: Report summary
+        run: |
+          FILE_COUNT=$(find docs -name "*.md" | wc -l)
+          echo "Total Markdown files: $FILE_COUNT"
