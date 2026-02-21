@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - "vm*"
+      - "v*-multi"
 
 jobs:
   build-linux:
