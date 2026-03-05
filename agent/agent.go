@@ -4,8 +4,8 @@ package agent
 
 import (
 	"bufio"
-	"context"
 	"bytes"
+	"context"
 	"encoding/gob"
 	"encoding/json"
 	"fmt"
@@ -44,18 +44,19 @@ func init() {
 
 // Agent provides dependency injection for all agent components
 type Agent struct {
-	mu            sync.RWMutex
-	cfg           config.AgentConfig // Injected configuration
-	client        *http.Client       // Injected HTTP client
-	store         *storage.Storage
-	memoryStore   *memory.VectorMemoryStore
-	registry      *tools.Registry
-	systemTools   []rpcproto.Tool
-	pulse         *PulseHandler
-	compactMu     sync.Mutex // Mutex for compaction (replaces channel)
-	kv            *kv.KV     // Fast KV cache (BadgerDB)
+	mu          sync.RWMutex
+	cfg         config.AgentConfig // Injected configuration
+	client      *http.Client       // Injected HTTP client
+	store       *storage.Storage
+	memoryStore *memory.VectorMemoryStore
+	registry    *tools.Registry
+	systemTools []rpcproto.Tool
+	pulse       *PulseHandler
+	compactMu   sync.Mutex // Mutex for compaction (replaces channel)
+	kv          *kv.KV     // Fast KV cache (BadgerDB)
 
-	// Rate limiting
+	// Rate limiting (protected by rateLimitMu)
+	rateLimitMu       sync.Mutex
 	lastAnthropicCall time.Time // Track last Anthropic API call for rate limit
 
 	// Tool enhancement features
@@ -241,17 +242,17 @@ type Config struct {
 // New creates a new Agent with the given configuration and optional dependencies
 func New(cfg Config) *Agent {
 	a := &Agent{
-		cfg:              cfg.AgentConfig,
-		client:           &http.Client{Timeout: cfg.HTTPTimeout},
-		store:            cfg.Storage,
-		memoryStore:      cfg.MemoryStore,
-		registry:         cfg.Registry,
-		timeProvider:     &defaultTimeProvider{},
-		idGenerator:      &defaultIDGenerator{},
-		logger:           &defaultLogger{},
-		realtimeSessions:   make(map[string]llm.RealtimeProvider),
-		realtimeLastUsed:   make(map[string]time.Time),
-		realtimeSessionMu:  make(map[string]*sync.Mutex),
+		cfg:               cfg.AgentConfig,
+		client:            &http.Client{Timeout: cfg.HTTPTimeout},
+		store:             cfg.Storage,
+		memoryStore:       cfg.MemoryStore,
+		registry:          cfg.Registry,
+		timeProvider:      &defaultTimeProvider{},
+		idGenerator:       &defaultIDGenerator{},
+		logger:            &defaultLogger{},
+		realtimeSessions:  make(map[string]llm.RealtimeProvider),
+		realtimeLastUsed:  make(map[string]time.Time),
+		realtimeSessionMu: make(map[string]*sync.Mutex),
 	}
 
 	// Use default registry if none is provided
@@ -907,16 +908,16 @@ func (a *Agent) getRealtimeProvider(sessionKey string) (llm.RealtimeProvider, er
 	if apiKey == "" {
 		return nil, fmt.Errorf("google live API key not configured (set GEMINI_API_KEY or GOOGLE_API_KEY env var)")
 	}
-	shortKey := apiKey
-	if len(apiKey) > 15 {
-		shortKey = apiKey[:15]
+	shortKey := "****"
+	if len(apiKey) > 4 {
+		shortKey = apiKey[:4] + "****"
 	}
-	log.Printf("[realtime] Using API key: %s...", shortKey)
+	log.Printf("[realtime] Using API key: %s", shortKey)
 
 	cfg := llm.RealtimeConfig{
-		Model:                  a.realtimeModel(),
-		APIKey:                 apiKey,
-		Voice:                  "Kore",
+		Model:                    a.realtimeModel(),
+		APIKey:                   apiKey,
+		Voice:                    "Kore",
 		InputAudioTranscription:  true,
 		OutputAudioTranscription: true,
 	}
@@ -1154,11 +1155,16 @@ func (a *Agent) ChatWithSession(sessionKey string, messages []Message) string {
 		}
 	}
 
-	// Delegate to Chat with the combined messages
-	return a.Chat(messages)
+	// Delegate to chatInternal with the correct session key (not "default")
+	return a.chatInternal(sessionKey, messages)
 }
 
 func (a *Agent) Chat(messages []Message) string {
+	return a.chatInternal("default", messages)
+}
+
+// chatInternal is the core chat logic with explicit sessionKey to avoid double-storing.
+func (a *Agent) chatInternal(sessionKey string, messages []Message) string {
 	lastMsg := ""
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
@@ -1172,15 +1178,15 @@ func (a *Agent) Chat(messages []Message) string {
 			reply = StripThinkingTags(reply)
 		}
 		if a.store != nil && lastMsg != "" {
-			a.storeMessage("default", "user", lastMsg)
-			a.storeMessage("default", "assistant", reply)
+			a.storeMessage(sessionKey, "user", lastMsg)
+			a.storeMessage(sessionKey, "assistant", reply)
 		}
 		return reply
 	}
 
 	// Check if we should use realtime/live mode (handles /live, /voice, /audio commands)
-	if a.shouldUseRealtime("default", messages) {
-		return a.chatWithRealtimeSession("default", messages)
+	if a.shouldUseRealtime(sessionKey, messages) {
+		return a.chatWithRealtimeSession(sessionKey, messages)
 	}
 
 	if out, ok := a.runCommandIfRequested(lastMsg); ok {
@@ -1204,41 +1210,21 @@ func (a *Agent) Chat(messages []Message) string {
 			}
 			// Soft-trigger memory flush (based on message count + time)
 			a.maybeFlushMemory(lastMsg)
-			// compaction check (async with timeout to prevent blocking)
+			// compaction check (async, single goroutine, lock held throughout)
 			go func() {
 				// Try to acquire lock (non-blocking)
 				if !a.compactMu.TryLock() {
 					log.Printf("[WARN] maybeCompact skipped: another compaction in progress")
 					return
 				}
-				// Lock acquired - ensure we unlock on exit
-				locked := true
 				defer func() {
-					if locked {
-						if r := recover(); r != nil {
-							log.Printf("[WARN] maybeCompact recovered from panic: %v", r)
-						}
-						a.compactMu.Unlock()
+					if r := recover(); r != nil {
+						log.Printf("[WARN] maybeCompact recovered from panic: %v", r)
 					}
-				}()
-
-				done := make(chan struct{}, 1) // buffered to prevent goroutine leak
-				// Run maybeCompact directly (already in goroutine, no need for nested one)
-				go func() {
-					defer func() { done <- struct{}{} }()
-					a.maybeCompact("default", messages, nil)
-				}()
-				select {
-				case <-done:
-					locked = false // compaction completed, unlock immediately
-					return
-				case <-time.After(30 * time.Second):
-					log.Printf("[WARN] maybeCompact timed out, continuing in background")
-					// Don't wait for it - let it run in background, unlock after timeout
-					locked = false
 					a.compactMu.Unlock()
-					return
-				}
+				}()
+				// Run compaction directly - no nested goroutine, lock held for full duration
+				a.maybeCompact(sessionKey, messages, nil)
 			}()
 		}
 	}
@@ -1281,7 +1267,7 @@ func (a *Agent) Chat(messages []Message) string {
 	// overflow handling: estimate Proactive context tokens and apply pruning/compaction
 	// Official OCG behavior: check if current + new > context_window, then prune/compact
 	if a.store != nil {
-		messages = a.handleContextOverflow("default", messages)
+		messages = a.handleContextOverflow(sessionKey, messages)
 	}
 
 	if a.cfg.APIKey == "" {
@@ -1349,9 +1335,8 @@ func (a *Agent) ChatStream(messages []Message, callback func(string)) {
 		}
 		// Soft-trigger memory flush (based on message count + time)
 		a.maybeFlushMemory(lastMsg)
-		// compaction check (async with timeout to prevent blocking)
+		// compaction check (async, single goroutine, lock held throughout)
 		go func() {
-			// Try to acquire lock (non-blocking)
 			if !a.compactMu.TryLock() {
 				log.Printf("[WARN] maybeCompact skipped: another compaction in progress")
 				return
@@ -1362,19 +1347,7 @@ func (a *Agent) ChatStream(messages []Message, callback func(string)) {
 				}
 				a.compactMu.Unlock()
 			}()
-
-			done := make(chan struct{}, 1)
-			go func() {
-				defer func() { done <- struct{}{} }()
-				a.maybeCompact("default", messages, nil)
-			}()
-			select {
-			case <-done:
-			case <-time.After(30 * time.Second):
-				log.Printf("[WARN] maybeCompact timed out, continuing in background")
-				// Don't wait for it - let it run in background
-				return
-			}
+			a.maybeCompact("default", messages, nil)
 		}()
 	}
 
@@ -1425,9 +1398,12 @@ func (a *Agent) ChatStream(messages []Message, callback func(string)) {
 	a.updateAnthropicRateLimit()
 
 	// Read SSE stream and check for tool calls
+	// OpenAI streams tool_calls incrementally: first chunk has index+name,
+	// subsequent chunks append to arguments. We merge by index.
 	reader := bufio.NewReader(resp.Body)
 	var contentBuilder strings.Builder
 	var toolCalls []ToolCall
+	tcArgBuilders := make(map[int]*strings.Builder) // index -> arguments builder
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -1446,16 +1422,32 @@ func (a *Agent) ChatStream(messages []Message, callback func(string)) {
 				if choices, ok := chunk["choices"].([]interface{}); ok && len(choices) > 0 {
 					if choice, ok := choices[0].(map[string]interface{}); ok {
 						if delta, ok := choice["delta"].(map[string]interface{}); ok {
-							// Check for tool calls
+							// Check for tool calls (incremental merge by index)
 							if tcRaw, ok := delta["tool_calls"].([]interface{}); ok && len(tcRaw) > 0 {
-								// Collect tool calls from chunk
 								for _, tcItem := range tcRaw {
-									if tcMap, ok := tcItem.(map[string]interface{}); ok {
+									tcMap, ok := tcItem.(map[string]interface{})
+									if !ok {
+										continue
+									}
+									// Get the index for this tool call chunk
+									idxFloat, _ := tcMap["index"].(float64)
+									idx := int(idxFloat)
+
+									// First chunk for this index: has id and function.name
+									if idx >= len(toolCalls) {
 										tcData, _ := json.Marshal(tcMap)
 										var tcCall ToolCall
-										if err := json.Unmarshal(tcData, &tcCall); err == nil {
-											if tcCall.Function.Name != "" {
-												toolCalls = append(toolCalls, tcCall)
+										_ = json.Unmarshal(tcData, &tcCall)
+										toolCalls = append(toolCalls, tcCall)
+										tcArgBuilders[idx] = &strings.Builder{}
+										tcArgBuilders[idx].WriteString(tcCall.Function.Arguments)
+									} else {
+										// Subsequent chunks: append arguments
+										if fnMap, ok := tcMap["function"].(map[string]interface{}); ok {
+											if argChunk, ok := fnMap["arguments"].(string); ok {
+												if b, exists := tcArgBuilders[idx]; exists {
+													b.WriteString(argChunk)
+												}
 											}
 										}
 									}
@@ -1470,6 +1462,12 @@ func (a *Agent) ChatStream(messages []Message, callback func(string)) {
 					}
 				}
 			}
+		}
+	}
+	// Finalize tool call arguments from builders
+	for idx, b := range tcArgBuilders {
+		if idx < len(toolCalls) {
+			toolCalls[idx].Function.Arguments = b.String()
 		}
 	}
 
@@ -1504,7 +1502,7 @@ func (a *Agent) ChatStream(messages []Message, callback func(string)) {
 		// Send tool execution start event (for streaming)
 		log.Printf("[TOOL] TOOL_EVENT: sending tool_start event")
 		log.Printf("[TOOL] DEBUG: Sending TOOL_EVENT to callback, toolCalls=%d", len(toolCalls))
-		callback(`[TOOL_EVENT]{"type":"tool_start","tools":[` + 
+		callback(`[TOOL_EVENT]{"type":"tool_start","tools":[` +
 			strings.Join(func() []string {
 				var names []string
 				for _, tc := range toolCalls {
@@ -1661,9 +1659,9 @@ func (a *Agent) handleToolCalls(messages []Message, toolCalls []ToolCall, assist
 		}
 		callback(`]}`)
 	}
-	
+
 	results := a.executeToolCalls(toolCalls)
-	
+
 	// Send tool result events
 	if callback != nil && len(results) > 0 {
 		for i, tr := range results {
@@ -1724,7 +1722,7 @@ func parseCustomToolCalls(content string) []ToolCall {
 		strings.Contains(content, "invoke name=") ||
 		strings.Contains(content, "function_call") ||
 		strings.Contains(content, "=\"")
-	
+
 	if !hasToolIndicator && !strings.Contains(content, "[{") && !strings.Contains(content, "{\"") {
 		return nil
 	}
@@ -1872,12 +1870,11 @@ func parseCustomToolCalls(content string) []ToolCall {
 // when JSON/XML parsing fails
 func parseSimpleToolCalls(content string) []ToolCall {
 	var toolCalls []ToolCall
-	
+
 	// Look for patterns like: "tool_name" or 'tool_name' followed by arguments
-	// This is a last-resort fallback
-	reSimple := regexp.MustCompile(`(?i)(?:tool_calls?|function_call|invoke)[:\s]+["']?([a-zA-Z_][a-zA-Z0-9_]*)["']?`)
-	matches := reSimple.FindAllStringSubmatch(content, -1)
-	
+	// This is a last-resort fallback (uses package-level compiled regex)
+	matches := reSimple.FindAllStringSubmatch(content, -1) //nolint:govet
+
 	for _, m := range matches {
 		if len(m) < 2 {
 			continue
@@ -1886,7 +1883,7 @@ func parseSimpleToolCalls(content string) []ToolCall {
 		if toolName == "" || len(toolName) > 100 {
 			continue
 		}
-		
+
 		// Only accept known tool names to avoid false positives
 		knownTools := map[string]bool{
 			"read": true, "write": true, "edit": true, "exec": true,
@@ -1894,11 +1891,11 @@ func parseSimpleToolCalls(content string) []ToolCall {
 			"memory_search": true, "memory_get": true, "sessions_send": true,
 			"subagents": true, "image": true, "tts": true, "web_fetch": true,
 		}
-		
+
 		if !knownTools[toolName] {
 			continue
 		}
-		
+
 		toolCalls = append(toolCalls, ToolCall{
 			ID:   fmt.Sprintf("call_simple_%d", len(toolCalls)),
 			Type: "function",
@@ -1911,11 +1908,11 @@ func parseSimpleToolCalls(content string) []ToolCall {
 			},
 		})
 	}
-	
+
 	if len(toolCalls) > 0 {
 		log.Printf("[DEBUG] parseSimpleToolCalls: extracted %d tool calls (fallback)", len(toolCalls))
 	}
-	
+
 	return toolCalls
 }
 
@@ -1944,7 +1941,8 @@ var (
 	reEdit2     = regexp.MustCompile(`(?i)Edit\s+([^:]+):\s*change\s+(.+)\s+to\s+(.+)`)
 	reEdit3     = regexp.MustCompile(`(?i)Replace\s+(.+)\s+with\s+(.+)\s+in\s+(.+)`)
 	reEdit4     = regexp.MustCompile(`(?i)replace\s+(.+)\s+with\s+(.+)\s+in\s+([^ ]+)`)
-	reJSONBlock = regexp.MustCompile(`(?s)(\[[^\]]*\]|\{[^}]*\})`)
+	reJSONBlock = regexp.MustCompile(`(?s)(\[.*?\]|\{.*?\})`)
+	reSimple    = regexp.MustCompile(`(?i)(?:tool_calls?|function_call|invoke)[:\s]+["']?([a-zA-Z_][a-zA-Z0-9_]*)["']?`)
 	reXMLTool1  = regexp.MustCompile(`(?i)<minimax:tool_call>\s*<invoke\s+name="([^"]+)"[^>]*>(.*?)</invoke>\s*</minimax:tool_call>`)
 	reXMLTool2  = regexp.MustCompile(`(?i)<minimax:tool_call>\s*<invoke\s+name="([^"]+)"[^>]*>(.*?)</invoke>\s*`)
 	reXMLParam  = regexp.MustCompile(`<parameter\s+name="([^"]+)">([^<]*)</parameter>`)
@@ -2771,7 +2769,9 @@ func (a *Agent) detectProviderType() llm.ProviderType {
 // Should be called after each successful Anthropic API request
 func (a *Agent) updateAnthropicRateLimit() {
 	if a.detectProviderType() == llm.ProviderAnthropic {
+		a.rateLimitMu.Lock()
 		a.lastAnthropicCall = time.Now()
+		a.rateLimitMu.Unlock()
 	}
 }
 
@@ -3027,8 +3027,12 @@ func (a *Agent) simpleResponse(messages []Message) string {
 			response = time.Now().Format("2006-01-02 15:04:05")
 		}
 	case strings.Contains(input, "stat"):
-		stats, _ := a.store.Stats()
-		response = fmt.Sprintf("Storage stats:\n- messages: %d\n- memories: %d\n- files: %d", stats["messages"], stats["memories"], stats["files"])
+		if a.store != nil {
+			stats, _ := a.store.Stats()
+			response = fmt.Sprintf("Storage stats:\n- messages: %d\n- memories: %d\n- files: %d", stats["messages"], stats["memories"], stats["files"])
+		} else {
+			response = "Storage not available"
+		}
 	case strings.Contains(input, "tools"):
 		if a.registry != nil {
 			toolList := a.registry.List()
