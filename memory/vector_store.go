@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -411,7 +412,10 @@ func initSchema(db *sql.DB) error {
 			var notnull int
 			var dflt interface{}
 			var pk int
-			rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk)
+			if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+				log.Printf("[WARN] initSchema scan error: %v", err)
+				continue
+			}
 			switch name {
 			case "embedding_dim":
 				hasDim = true
@@ -599,12 +603,8 @@ func (s *VectorMemoryStore) StoreWithSource(text string, category string, import
 	// Add to HNSW index
 	if s.hnsw != nil {
 		if err := s.hnsw.Add([][]float32{vector}); err != nil {
-			log.Printf("HNSW add failed, disabling index: %v", err)
-			s.hnsw.Close()
-			s.hnsw = nil
-			s.hnswMu.Lock()
-			s.hnswIDs = nil
-			s.hnswMu.Unlock()
+			log.Printf("[WARN] HNSW add failed for %s: %v. Scheduling rebuild.", shortID(id), err)
+			go s.rebuildHNSW()
 		} else {
 			s.hnswMu.Lock()
 			s.hnswIDs = append(s.hnswIDs, id)
@@ -1041,7 +1041,7 @@ func (s *VectorMemoryStore) hybridSearch(query string, queryVec []float32, limit
 		if err != nil {
 			continue
 		}
-		textScore := float32(1.0 / (1.0 + maxf(0, bm25)))
+		textScore := float32(1.0 / (1.0 + float32(math.Abs(float64(bm25)))))
 		if m, ok := merged[id]; ok {
 			m.score = m.score + s.cfg.TextWeight*textScore
 		} else {
@@ -1082,13 +1082,6 @@ func (s *VectorMemoryStore) vectorSearch(queryVec []float32, limit int) ([]Memor
 		return s.hnswSearch(queryVec, limit, 0)
 	}
 	return s.linearSearch(queryVec, limit, 0)
-}
-
-func maxf(a float32, b float32) float32 {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func (s *VectorMemoryStore) getByID(id string) (MemoryEntry, error) {
@@ -1175,21 +1168,97 @@ func (s *VectorMemoryStore) rebuildHNSW() {
 		return
 	}
 
+	// Load vectors into the NEW index BEFORE swapping (OPT-4: atomic replacement)
+	newIDs, err := s.loadVectorsIntoIndex(idx)
+	if err != nil {
+		log.Printf("[WARN] HNSW rebuild load vectors failed: %v", err)
+		idx.Close()
+		return
+	}
+
+	// Atomic swap: old index is replaced only after new one is fully populated
 	s.hnswMu.Lock()
 	s.hnsw = idx
-	s.hnswIDs = nil
-	s.hnswDeletedCount = 0 // Reset deletion counter after rebuild
+	s.hnswIDs = newIDs
+	s.hnswDeletedCount = 0
 	s.hnswMu.Unlock()
 
 	old.Close()
-	s.loadExistingVectors()
 	s.saveHNSW()
-	log.Printf("[OK] HNSW rebuild completed, deleted count reset")
+	log.Printf("[OK] HNSW rebuild completed (atomic), %d vectors loaded", len(newIDs))
 }
 
 // RebuildHNSW forces a rebuild of the HNSW index (public method)
 func (s *VectorMemoryStore) RebuildHNSW() {
 	go s.rebuildHNSW()
+}
+
+// loadVectorsIntoIndex loads all vectors from DB into a given HNSW index (used for atomic rebuild)
+func (s *VectorMemoryStore) loadVectorsIntoIndex(idx *HNSWIndex) ([]string, error) {
+	var totalCount int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM vector_memories").Scan(&totalCount); err != nil {
+		return nil, fmt.Errorf("count query failed: %w", err)
+	}
+	if totalCount == 0 {
+		return nil, nil
+	}
+
+	batchSize := 1000
+	if s.cfg.BatchSize > 0 {
+		batchSize = s.cfg.BatchSize
+	}
+
+	var allIDs []string
+	offset := 0
+
+	for offset < totalCount {
+		rows, err := s.db.Query(`
+			SELECT id, vector, embedding_dim 
+			FROM vector_memories 
+			ORDER BY rowid 
+			LIMIT ? OFFSET ?
+		`, batchSize, offset)
+		if err != nil {
+			return nil, fmt.Errorf("batch query failed at offset %d: %w", offset, err)
+		}
+
+		var vectors [][]float32
+		var ids []string
+
+		for rows.Next() {
+			var id string
+			var vectorBlob []byte
+			var embeddingDim sql.NullInt64
+			if err := rows.Scan(&id, &vectorBlob, &embeddingDim); err != nil {
+				continue
+			}
+			if len(vectorBlob) == 0 {
+				continue
+			}
+			vector := deserializeVector(vectorBlob)
+			if vector == nil || len(vector) == 0 {
+				continue
+			}
+			dim := len(vector)
+			if hnswDim := idx.Dim(); hnswDim > 0 && dim != hnswDim {
+				continue
+			}
+			vectors = append(vectors, vector)
+			ids = append(ids, id)
+		}
+		rows.Close()
+
+		if len(vectors) > 0 {
+			if err := idx.Add(vectors); err != nil {
+				return nil, fmt.Errorf("index add failed at offset %d: %w", offset, err)
+			}
+			allIDs = append(allIDs, ids...)
+		}
+
+		offset += batchSize
+	}
+
+	return allIDs, nil
 }
 
 func (s *VectorMemoryStore) Count() (int, error) {
@@ -1356,15 +1425,12 @@ func logMemUsage(prefix string) {
 }
 
 func serializeVector(v []float32) []byte {
-	result := make([]byte, len(v)*4)
+	buf := make([]byte, len(v)*4)
 	for i, f := range v {
 		bits := math.Float32bits(f)
-		result[i*4] = byte(bits)
-		result[i*4+1] = byte(bits >> 8)
-		result[i*4+2] = byte(bits >> 16)
-		result[i*4+3] = byte(bits >> 24)
+		binary.LittleEndian.PutUint32(buf[i*4:], bits)
 	}
-	return result
+	return buf
 }
 
 func (s *VectorMemoryStore) backfillEmbeddingDim() {

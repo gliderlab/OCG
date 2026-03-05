@@ -110,7 +110,7 @@ func (t *ExecTool) Execute(args map[string]interface{}) (interface{}, error) {
 
 	// Parse command - try to use shell-less execution for safety
 	// If command contains shell metacharacters, use shell only when explicitly allowed
-	hasShellChar := strings.ContainsAny(command, "|;&$<>`")
+	hasShellChar := strings.ContainsAny(command, "|;&$<>`\n(){}")
 	var cmd *exec.Cmd
 	if hasShellChar {
 		if !allowShell {

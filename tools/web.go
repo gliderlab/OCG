@@ -160,7 +160,7 @@ func tavilyAPISearch(query string, count int, apiKey string) ([]tavilyResult, er
 }
 
 // Brave Search fallback implementation
-func braveSearch(query string, count int) ([]tavilyResult, error) {
+func braveSearch(query string, _ int) ([]tavilyResult, error) {
 	// Return a mock result with instructions
 	return []tavilyResult{
 		{
@@ -285,7 +285,7 @@ func fetchURL(url, extractMode string, maxChars int) (string, error) {
 }
 
 // extractText: very basic HTML stripping and whitespace cleanup
-func extractText(html, mode string) string {
+func extractText(html, _ string) string {
 	// Remove scripts and styles
 	replacer := strings.NewReplacer(
 		"<script", "\n<script",

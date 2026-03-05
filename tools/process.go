@@ -246,8 +246,9 @@ func (t *ProcessTool) start(args map[string]interface{}) (interface{}, error) {
 				if err != nil {
 					break
 				}
-				procMutex.Lock()
+				procMutex.RLock()
 				p, ok := processes[sessionId]
+				procMutex.RUnlock()
 				if ok {
 					p.Mutex.Lock()
 					// Check buffer size before writing to prevent memory exhaustion
@@ -256,7 +257,6 @@ func (t *ProcessTool) start(args map[string]interface{}) (interface{}, error) {
 					}
 					p.Mutex.Unlock()
 				}
-				procMutex.Unlock()
 			}
 		}()
 	}

@@ -19,3 +19,5 @@ models/*.gguf
 llama.cpp
 *.tar.gz
 backup-sources.sh
+.vscode/settings.json
+.gitignore

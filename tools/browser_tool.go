@@ -1146,11 +1146,11 @@ func (s *BrowserService) cdpRequest(cdpPort int, method string, params map[strin
 
 type coords struct{ X, Y int }
 
-func (s *BrowserService) resolveRef(cdpPort int, ref string) *coords {
+func (s *BrowserService) resolveRef(_ int, _ string) *coords {
 	return &coords{X: 100, Y: 100}
 }
 
-func (s *BrowserService) buildAISnapshot(docResult, axTree map[string]interface{}, frameURL string, interactive, compact bool, limit int) (string, []map[string]string) {
+func (s *BrowserService) buildAISnapshot(docResult, _ map[string]interface{}, frameURL string, _, _ bool, _ int) (string, []map[string]string) {
 	var sb strings.Builder
 	sb.WriteString("<page>\n")
 	// FIX: Use fmt.Fprintf instead of WriteString(fmt.Sprintf(...))
@@ -1166,7 +1166,7 @@ func (s *BrowserService) buildAISnapshot(docResult, axTree map[string]interface{
 	return sb.String(), nil
 }
 
-func (s *BrowserService) buildHTMLSnapshot(docResult map[string]interface{}, frameURL string, depth int) string {
+func (s *BrowserService) buildHTMLSnapshot(_ map[string]interface{}, frameURL string, _ int) string {
 	var sb strings.Builder
 	sb.WriteString("<page>\n")
 	// FIX: Use fmt.Fprintf instead of WriteString(fmt.Sprintf(...))
