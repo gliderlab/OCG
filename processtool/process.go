@@ -94,7 +94,10 @@ func cleanupProcesses() {
 		procMutex.RLock()
 		for id, proc := range processes {
 			if proc.Cmd != nil && proc.Cmd.ProcessState != nil && proc.Cmd.ProcessState.Exited() {
-				toDelete = append(toDelete, id)
+				// Don't arbitrarily delete processes that are meant to auto-restart
+				if !proc.AutoRestart {
+					toDelete = append(toDelete, id)
+				}
 			}
 		}
 		procMutex.RUnlock()
@@ -255,26 +258,18 @@ func restartProcess(proc *ProcessInfo) (map[string]interface{}, error) {
 		}
 	}
 
-	// Generate new sessionId
-	newSessionId := fmt.Sprintf("proc_%d", time.Now().UnixNano())
+	// Use original sessionId to maintain control
+	sessionId := proc.ID
 
 	procMutex.Lock()
-	processes[newSessionId] = &ProcessInfo{
-		ID:             newSessionId,
-		Cmd:            cmd,
-		Buffer:         &buf,
-		Pty:            ptyFile,
-		StdinPipe:      stdinPipe,
-		CreatedAt:      time.Now(),
-		AutoRestart:    proc.AutoRestart,
-		MaxRetries:     proc.MaxRetries,
-		CurrentRetries: 0,
-		RestartDelay:   proc.RestartDelay,
-		Command:        proc.Command,
-		WorkDir:        proc.WorkDir,
-		Env:            proc.Env,
-		UsePty:         proc.UsePty,
-	}
+	// Update existing process struct in-place to keep state like retries
+	proc.Cmd = cmd
+	proc.Buffer = &buf
+	proc.Pty = ptyFile
+	proc.StdinPipe = stdinPipe
+	proc.LastRestartTime = time.Now()
+
+	processes[sessionId] = proc
 	procMutex.Unlock()
 
 	// Wait for process in background
@@ -283,7 +278,7 @@ func restartProcess(proc *ProcessInfo) (map[string]interface{}, error) {
 	}()
 
 	return map[string]interface{}{
-		"sessionId":   newSessionId,
+		"sessionId":   sessionId,
 		"pid":         cmd.Process.Pid,
 		"autoRestart": proc.AutoRestart,
 		"maxRetries":  proc.MaxRetries,

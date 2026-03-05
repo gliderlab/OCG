@@ -99,8 +99,8 @@ var EMBEDDING_DIMENSIONS = map[string]int{
 	"text-embedding-ada-002": 1536, // ADA-002 actual dimension is 1536
 	// Ollama
 	"mxbai-embed-large": 1024,
-	"nomic-embed-text": 768,
-	"all-minilm": 384,
+	"nomic-embed-text":  768,
+	"all-minilm":        384,
 	// MiniMax
 	"embo-01": 1024,
 	// Custom (fallback)
@@ -485,6 +485,10 @@ func (s *VectorMemoryStore) StoreBatch(entries []struct {
 	}
 	defer tx.Rollback()
 
+	// Accumulators for HNSW update
+	var hnswVectors [][]float32
+	var hnswTargetIDs []string
+
 	// Prepare statement for batch insert
 	stmt, err := tx.Prepare(`
 		INSERT INTO vector_memories (id, text, vector, importance, category, source, embedding_dim, created_at, updated_at)
@@ -528,15 +532,10 @@ func (s *VectorMemoryStore) StoreBatch(entries []struct {
 			Category string
 		}{id, e.Text, e.Category})
 
-		// Add to HNSW
+		// Collect HNSW vectors for batch insert after commit
 		if s.hnsw != nil {
-			if err := s.hnsw.Add([][]float32{vectors[i]}); err != nil {
-				log.Printf("HNSW add failed: %v", err)
-			} else {
-				s.hnswMu.Lock()
-				s.hnswIDs = append(s.hnswIDs, id)
-				s.hnswMu.Unlock()
-			}
+			hnswVectors = append(hnswVectors, vectors[i])
+			hnswTargetIDs = append(hnswTargetIDs, id)
 		}
 	}
 
@@ -545,16 +544,23 @@ func (s *VectorMemoryStore) StoreBatch(entries []struct {
 		return nil, fmt.Errorf("failed to commit transaction: %v", err)
 	}
 
+	// Add to HNSW after successful DB commit
+	if s.hnsw != nil && len(hnswVectors) > 0 {
+		if err := s.hnsw.Add(hnswVectors); err != nil {
+			log.Printf("[WARN] HNSW batch add failed: %v", err)
+		} else {
+			s.hnswMu.Lock()
+			s.hnswIDs = append(s.hnswIDs, hnswTargetIDs...)
+			s.hnswMu.Unlock()
+			s.saveHNSW()
+		}
+	}
+
 	// Batch insert FTS entries (Optimization #4)
 	if len(ftsEntries) > 0 {
 		if err := s.upsertFTSBatch(ftsEntries); err != nil {
 			log.Printf("[WARN] batch FTS insert failed: %v", err)
 		}
-	}
-
-	// Save HNSW after batch
-	if s.hnsw != nil && len(successIDs) > 0 {
-		s.saveHNSW()
 	}
 
 	failedCount := len(ids) - len(successIDs)
