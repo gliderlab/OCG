@@ -295,8 +295,8 @@ func (t *ProcessTool) start(args map[string]interface{}) (interface{}, error) {
 }
 
 func (t *ProcessTool) list() (interface{}, error) {
-	procMutex.Lock()
-	defer procMutex.Unlock()
+	procMutex.RLock()
+	defer procMutex.RUnlock()
 
 	items := make([]map[string]interface{}, 0)
 	for id, p := range processes {

@@ -121,7 +121,8 @@ func (t *ExecTool) Execute(args map[string]interface{}) (interface{}, error) {
 			if len(parts) == 0 {
 				return nil, &ExecError{Message: "empty command"}
 			}
-			if _, ok := allowlist[parts[0]]; !ok {
+			baseName := filepath.Base(parts[0])
+			if _, ok := allowlist[baseName]; !ok {
 				return nil, &ExecError{Message: "command not in allowlist"}
 			}
 		}
@@ -137,7 +138,8 @@ func (t *ExecTool) Execute(args map[string]interface{}) (interface{}, error) {
 			return nil, &ExecError{Message: "empty command"}
 		}
 		if len(allowlist) > 0 {
-			if _, ok := allowlist[parts[0]]; !ok {
+			baseName := filepath.Base(parts[0])
+			if _, ok := allowlist[baseName]; !ok {
 				return nil, &ExecError{Message: "command not in allowlist"}
 			}
 		}

@@ -567,12 +567,13 @@ func (a *Agent) saveConfigToDB(apiKey, baseURL, model string) {
 
 func (a *Agent) UpdateConfig(apiKey, baseURL, model string) {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 	a.cfg.APIKey = apiKey
 	a.cfg.BaseURL = baseURL
 	a.cfg.Model = model
+	a.mu.Unlock()
+
 	if a.store != nil {
-		a.saveConfigToDB(apiKey, baseURL, model)
+		go a.saveConfigToDB(apiKey, baseURL, model)
 	}
 }
 

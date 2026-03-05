@@ -3,6 +3,7 @@ package agent
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,9 +30,10 @@ type ToolCallRecord struct {
 
 // ToolLoopDetector Tool loop detector
 type ToolLoopDetector struct {
-	config     ToolLoopDetectionConfig
-	calls      []ToolCallRecord
-	lastTool   string
+	mu               sync.Mutex
+	config           ToolLoopDetectionConfig
+	calls            []ToolCallRecord
+	lastTool         string
 	consecutiveCount int
 }
 
@@ -49,6 +51,9 @@ func NewToolLoopDetector(cfg ToolLoopDetectionConfig) *ToolLoopDetector {
 
 // RecordCall Record tool call
 func (d *ToolLoopDetector) RecordCall(toolName string, args string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	now := time.Now()
 	
 	// Cleanup old records
@@ -72,6 +77,9 @@ func (d *ToolLoopDetector) RecordCall(toolName string, args string) {
 
 // CheckLoop Check for loop
 func (d *ToolLoopDetector) CheckLoop() (bool, string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	now := time.Now()
 	d.calls = d.cleanupOldCalls(now)
 	
@@ -113,6 +121,9 @@ func (d *ToolLoopDetector) cleanupOldCalls(now time.Time) []ToolCallRecord {
 
 // GetStats Get stats
 func (d *ToolLoopDetector) GetStats() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	now := time.Now()
 	d.calls = d.cleanupOldCalls(now)
 	

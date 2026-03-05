@@ -365,7 +365,7 @@ func (t *MessageTool) handleSend(channelType channels.ChannelType, args map[stri
 }
 
 // handleReact adds a reaction
-func (t *MessageTool) handleReact(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleReact(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	messageId := GetString(args, "messageId")
 	emoji := GetString(args, "emoji")
 
@@ -380,7 +380,7 @@ func (t *MessageTool) handleReact(channelType channels.ChannelType, args map[str
 }
 
 // handleDelete deletes a message
-func (t *MessageTool) handleDelete(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleDelete(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	messageId := GetString(args, "messageId")
 	if messageId == "" {
 		return nil, &MessageError{Message: "messageId is required"}
@@ -390,7 +390,7 @@ func (t *MessageTool) handleDelete(channelType channels.ChannelType, args map[st
 }
 
 // handleEdit edits a message
-func (t *MessageTool) handleEdit(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleEdit(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	messageId := GetString(args, "messageId")
 	text := GetString(args, "message")
 
@@ -405,7 +405,7 @@ func (t *MessageTool) handleEdit(channelType channels.ChannelType, args map[stri
 }
 
 // handleRead reads messages
-func (t *MessageTool) handleRead(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleRead(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	limit := GetInt(args, "limit")
 	if limit == 0 {
 		limit = 10
@@ -419,7 +419,7 @@ func (t *MessageTool) handleRead(channelType channels.ChannelType, args map[stri
 }
 
 // handleSearch searches messages
-func (t *MessageTool) handleSearch(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleSearch(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	query := GetString(args, "query")
 	if query == "" {
 		return nil, &MessageError{Message: "query is required"}
@@ -433,7 +433,7 @@ func (t *MessageTool) handleSearch(channelType channels.ChannelType, args map[st
 }
 
 // handlePoll creates a poll
-func (t *MessageTool) handlePoll(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handlePoll(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	question := GetString(args, "pollQuestion")
 	options := GetStringSlice(args, "pollOption")
 
@@ -452,7 +452,7 @@ func (t *MessageTool) handlePoll(channelType channels.ChannelType, args map[stri
 }
 
 // handlePin pins/unpins a message
-func (t *MessageTool) handlePin(channelType channels.ChannelType, args map[string]interface{}, pin bool) (interface{}, error) {
+func (t *MessageTool) handlePin(_ channels.ChannelType, args map[string]interface{}, pin bool) (interface{}, error) {
 	messageId := GetString(args, "messageId")
 	if messageId == "" {
 		return nil, &MessageError{Message: "messageId is required"}
@@ -467,12 +467,12 @@ func (t *MessageTool) handlePin(channelType channels.ChannelType, args map[strin
 }
 
 // handleListPins lists pinned messages
-func (t *MessageTool) handleListPins(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleListPins(_ channels.ChannelType, _ map[string]interface{}) (interface{}, error) {
 	return MessageResult{OK: true, Message: "Pinned messages list", Extra: map[string]interface{}{"pins": []string{}}}, nil
 }
 
 // handleThreadCreate creates a thread
-func (t *MessageTool) handleThreadCreate(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleThreadCreate(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	name := GetString(args, "name")
 	message := GetString(args, "message")
 
@@ -484,12 +484,12 @@ func (t *MessageTool) handleThreadCreate(channelType channels.ChannelType, args 
 }
 
 // handleThreadList lists threads
-func (t *MessageTool) handleThreadList(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleThreadList(_ channels.ChannelType, _ map[string]interface{}) (interface{}, error) {
 	return MessageResult{OK: true, Message: "Thread list", Extra: map[string]interface{}{"threads": []string{}}}, nil
 }
 
 // handleThreadReply replies to a thread
-func (t *MessageTool) handleThreadReply(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleThreadReply(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	threadId := GetString(args, "threadId")
 	_ = GetString(args, "message") // message content
 
@@ -501,7 +501,7 @@ func (t *MessageTool) handleThreadReply(channelType channels.ChannelType, args m
 }
 
 // handleMemberInfo gets member info
-func (t *MessageTool) handleMemberInfo(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleMemberInfo(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	userId := GetString(args, "userId")
 	if userId == "" {
 		return nil, &MessageError{Message: "userId is required"}
@@ -515,7 +515,7 @@ func (t *MessageTool) handleMemberInfo(channelType channels.ChannelType, args ma
 }
 
 // handleRoleInfo gets role info
-func (t *MessageTool) handleRoleInfo(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleRoleInfo(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	roleId := GetString(args, "roleId")
 	if roleId == "" {
 		return nil, &MessageError{Message: "roleId is required"}
@@ -525,12 +525,12 @@ func (t *MessageTool) handleRoleInfo(channelType channels.ChannelType, args map[
 }
 
 // handleChannelInfo gets channel info
-func (t *MessageTool) handleChannelInfo(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleChannelInfo(_ channels.ChannelType, _ map[string]interface{}) (interface{}, error) {
 	return MessageResult{OK: true, Message: "Channel info retrieved"}, nil
 }
 
 // handleChannelList lists channels
-func (t *MessageTool) handleChannelList(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleChannelList(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	guildId := GetString(args, "guildId")
 
 	var channelList []string
@@ -550,22 +550,22 @@ func (t *MessageTool) handleChannelList(channelType channels.ChannelType, args m
 }
 
 // handleEmojiList lists emojis
-func (t *MessageTool) handleEmojiList(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleEmojiList(_ channels.ChannelType, _ map[string]interface{}) (interface{}, error) {
 	return MessageResult{OK: true, Message: "Emoji list", Extra: map[string]interface{}{"emojis": []string{}}}, nil
 }
 
 // handleSticker handles sticker operations
-func (t *MessageTool) handleSticker(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleSticker(_ channels.ChannelType, _ map[string]interface{}) (interface{}, error) {
 	return MessageResult{OK: true, Message: "Sticker operation"}, nil
 }
 
 // handleEventList lists events
-func (t *MessageTool) handleEventList(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleEventList(_ channels.ChannelType, _ map[string]interface{}) (interface{}, error) {
 	return MessageResult{OK: true, Message: "Event list", Extra: map[string]interface{}{"events": []string{}}}, nil
 }
 
 // handleEventCreate creates an event
-func (t *MessageTool) handleEventCreate(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleEventCreate(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	name := GetString(args, "name")
 	startTime := GetString(args, "startTime")
 
@@ -577,7 +577,7 @@ func (t *MessageTool) handleEventCreate(channelType channels.ChannelType, args m
 }
 
 // handleTimeout timeouts a user
-func (t *MessageTool) handleTimeout(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleTimeout(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	userId := GetString(args, "userId")
 	duration := GetInt(args, "durationMin")
 
@@ -589,7 +589,7 @@ func (t *MessageTool) handleTimeout(channelType channels.ChannelType, args map[s
 }
 
 // handleKick kicks a user
-func (t *MessageTool) handleKick(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleKick(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	userId := GetString(args, "userId")
 	if userId == "" {
 		return nil, &MessageError{Message: "userId is required"}
@@ -599,7 +599,7 @@ func (t *MessageTool) handleKick(channelType channels.ChannelType, args map[stri
 }
 
 // handleBan bans a user
-func (t *MessageTool) handleBan(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleBan(_ channels.ChannelType, args map[string]interface{}) (interface{}, error) {
 	userId := GetString(args, "userId")
 	if userId == "" {
 		return nil, &MessageError{Message: "userId is required"}
@@ -609,12 +609,12 @@ func (t *MessageTool) handleBan(channelType channels.ChannelType, args map[strin
 }
 
 // handlePermissions manages permissions
-func (t *MessageTool) handlePermissions(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handlePermissions(_ channels.ChannelType, _ map[string]interface{}) (interface{}, error) {
 	return MessageResult{OK: true, Message: "Permissions updated"}, nil
 }
 
 // handleVoiceStatus manages voice status
-func (t *MessageTool) handleVoiceStatus(channelType channels.ChannelType, args map[string]interface{}) (interface{}, error) {
+func (t *MessageTool) handleVoiceStatus(_ channels.ChannelType, _ map[string]interface{}) (interface{}, error) {
 	return MessageResult{OK: true, Message: "Voice status updated"}, nil
 }
 

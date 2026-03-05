@@ -124,15 +124,10 @@ func (a *Agent) preprocessChat(sessionKey, lastMsg string, messages []Message) {
 
 	// Async compaction check
 	go func() {
-		if !a.compactMu.TryLock() {
-			log.Printf("[WARN] maybeCompact skipped: another compaction in progress")
-			return
-		}
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("[WARN] maybeCompact recovered from panic: %v", r)
 			}
-			a.compactMu.Unlock()
 		}()
 		a.maybeCompact(sessionKey, messages, nil)
 	}()

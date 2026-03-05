@@ -196,33 +196,29 @@ func NewLocalProvider(serverURL string, dim int) (*LocalProvider, error) {
 		dim = GetEmbeddingDimension("local", 0)
 	}
 
-	// Wait for service ready (up to 30s)
-	var lastErr error
-	for i := 0; i < 30; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/health", nil)
-		resp, err := http.DefaultClient.Do(req)
-		cancel()
-		if err != nil {
-			lastErr = err
-			time.Sleep(time.Second)
-			continue
-		}
-		resp.Body.Close()
-		if resp.StatusCode == http.StatusOK {
-			log.Printf("Local embedding service connected: %s", serverURL)
-			return &LocalProvider{
-				serverURL: serverURL,
-				dim:       dim,
-				client:    &http.Client{Timeout: 60 * time.Second},
-			}, nil
-		}
-		lastErr = fmt.Errorf("server returned %d", resp.StatusCode)
-		time.Sleep(time.Second)
+	provider := &LocalProvider{
+		serverURL: serverURL,
+		dim:       dim,
+		client:    &http.Client{Timeout: 60 * time.Second},
 	}
 
-	return nil, fmt.Errorf("local server unavailable: %v", lastErr)
+	// Wait for service ready without blocking startup for 30s
+	// Just do a quick 2-second check if it's immediately available
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+"/health", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err == nil {
+		resp.Body.Close()
+		log.Printf("Local embedding service connected: %s", serverURL)
+		return provider, nil
+	}
+
+	// Service not immediately ready. Still return the provider and asynchronously warn/poll if needed.
+	// We'll log a warning and let it recover over time in the background.
+	log.Printf("[WARN] Local embedding service not immediately ready (will retry on embed): %v", err)
+	return provider, nil
 }
 
 func (p *LocalProvider) Embed(text string) ([]float32, error) {
@@ -426,13 +422,19 @@ func initSchema(db *sql.DB) error {
 			}
 		}
 		if !hasDim {
-			db.Exec(`ALTER TABLE vector_memories ADD COLUMN embedding_dim INTEGER`)
+			if _, err := db.Exec(`ALTER TABLE vector_memories ADD COLUMN embedding_dim INTEGER`); err != nil {
+				log.Printf("[WARN] initSchema failed to add embedding_dim: %v", err)
+			}
 		}
 		if !hasSource {
-			db.Exec(`ALTER TABLE vector_memories ADD COLUMN source TEXT DEFAULT 'manual'`)
+			if _, err := db.Exec(`ALTER TABLE vector_memories ADD COLUMN source TEXT DEFAULT 'manual'`); err != nil {
+				log.Printf("[WARN] initSchema failed to add source: %v", err)
+			}
 		}
 		if !hasUpdated {
-			db.Exec(`ALTER TABLE vector_memories ADD COLUMN updated_at INTEGER DEFAULT (strftime('%s','now'))`)
+			if _, err := db.Exec(`ALTER TABLE vector_memories ADD COLUMN updated_at INTEGER DEFAULT (strftime('%s','now'))`); err != nil {
+				log.Printf("[WARN] initSchema failed to add updated_at: %v", err)
+			}
 		}
 	}
 
@@ -551,7 +553,8 @@ func (s *VectorMemoryStore) StoreBatch(entries []struct {
 	// Add to HNSW after successful DB commit
 	if s.hnsw != nil && len(hnswVectors) > 0 {
 		if err := s.hnsw.Add(hnswVectors); err != nil {
-			log.Printf("[WARN] HNSW batch add failed: %v", err)
+			log.Printf("[WARN] HNSW batch add failed: %v (scheduling rebuild)", err)
+			go s.rebuildHNSW()
 		} else {
 			s.hnswMu.Lock()
 			s.hnswIDs = append(s.hnswIDs, hnswTargetIDs...)
@@ -589,28 +592,33 @@ func (s *VectorMemoryStore) StoreWithSource(text string, category string, import
 		source = "manual"
 	}
 
+	// Add to HNSW index before DB to ensure consistency or recover gracefully
+	if s.hnsw != nil {
+		if err := s.hnsw.Add([][]float32{vector}); err != nil {
+			return "", fmt.Errorf("hnsw index add failed: %v", err)
+		}
+	}
+
 	_, err = s.db.Exec(`
 		INSERT INTO vector_memories (id, text, vector, importance, category, source, embedding_dim, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, id, text, vectorBlob, importance, category, source, s.cfg.EmbeddingDim, now, now)
-	if err == nil {
-		s.upsertFTS(id, text, category)
-	}
+
 	if err != nil {
+		if s.hnsw != nil {
+			// Rollback HNSW via full rebuild if DB insert fails
+			go s.rebuildHNSW()
+		}
 		return "", err
 	}
 
-	// Add to HNSW index
+	s.upsertFTS(id, text, category)
+
 	if s.hnsw != nil {
-		if err := s.hnsw.Add([][]float32{vector}); err != nil {
-			log.Printf("[WARN] HNSW add failed for %s: %v. Scheduling rebuild.", shortID(id), err)
-			go s.rebuildHNSW()
-		} else {
-			s.hnswMu.Lock()
-			s.hnswIDs = append(s.hnswIDs, id)
-			s.hnswMu.Unlock()
-			s.saveHNSW()
-		}
+		s.hnswMu.Lock()
+		s.hnswIDs = append(s.hnswIDs, id)
+		s.hnswMu.Unlock()
+		s.saveHNSW()
 	}
 
 	log.Printf("[OK] Memory stored: %s [%s]", shortID(id), category)
@@ -1236,7 +1244,7 @@ func (s *VectorMemoryStore) loadVectorsIntoIndex(idx *HNSWIndex) ([]string, erro
 				continue
 			}
 			vector := deserializeVector(vectorBlob)
-			if vector == nil || len(vector) == 0 {
+			if len(vector) == 0 {
 				continue
 			}
 			dim := len(vector)

@@ -351,17 +351,15 @@ func (a *Agent) chatInternal(sessionKey string, messages []Message) string {
 		if a.thinkingConfig.Mode == "" || a.thinkingConfig.Mode == ThinkingModeOff {
 			reply = StripThinkingTags(reply)
 		}
-		if a.store != nil && lastMsg != "" {
+		if a.store != nil && lastMsg != "" && !strings.HasPrefix(lastMsg, "[realtime-fallback]") {
 			a.storeMessage(sessionKey, "user", lastMsg)
 			a.storeMessage(sessionKey, "assistant", reply)
 		}
 		return reply
 	}
 
-	// Check if we should use realtime/live mode
-	if a.shouldUseRealtime(sessionKey, messages) {
-		return a.chatWithRealtimeSession(sessionKey, messages)
-	}
+	// NOTE: realtime/live mode check was removed here to prevent double-checking
+	// and fallback loops. It is correctly handled in ChatWithSession.
 
 	if out, ok := a.runCommandIfRequested(lastMsg); ok {
 		return finalize(out)

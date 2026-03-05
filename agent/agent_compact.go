@@ -15,12 +15,11 @@ import (
 
 // pruneMessages removes old tool results from messages based on config
 func (a *Agent) pruneMessages(_ string, messages []Message) []Message {
-	if a.cfg.ContextPruning.Mode != "cache-ttl" {
-		return messages
-	}
-
 	cfg := a.cfg.ContextPruning
 	if cfg.Mode == "off" {
+		return messages
+	}
+	if cfg.Mode != "cache-ttl" {
 		return messages
 	}
 
@@ -101,6 +100,15 @@ func (a *Agent) pruneMessages(_ string, messages []Message) []Message {
 
 // maybeCompact checks if compaction is needed and executes it if necessary
 func (a *Agent) maybeCompact(sessionKey string, _ []Message, compactChan chan<- bool) {
+	if !a.compactMu.TryLock() {
+		log.Printf("[WARN] maybeCompact skipped: another compaction in progress")
+		if compactChan != nil {
+			compactChan <- false
+		}
+		return
+	}
+	defer a.compactMu.Unlock()
+
 	if a.store == nil {
 		if compactChan != nil {
 			compactChan <- false
@@ -237,30 +245,33 @@ func buildSummary(msgs []storage.Message) string {
 	return strings.Join(lines, "\n")
 }
 
+var providerKeywords = []struct {
+	keyword  string
+	provider llm.ProviderType
+}{
+	{"anthropic", llm.ProviderAnthropic},
+	{"google", llm.ProviderGoogle},
+	{"generativelanguage", llm.ProviderGoogle},
+	{"minimax", llm.ProviderMiniMax},
+	{"ollama", llm.ProviderOllama},
+	{"openrouter", llm.ProviderOpenRouter},
+	{"moonshot", llm.ProviderMoonshot},
+	{"zhipu", llm.ProviderGLM},
+	{"glm", llm.ProviderGLM},
+	{"qianfan", llm.ProviderQianfan},
+	{"bedrock", llm.ProviderBedrock},
+	{"vercel", llm.ProviderVercel},
+	{"z.ai", llm.ProviderZAi},
+	{"z ai", llm.ProviderZAi},
+}
+
 // detectProviderType detects LLM provider type from BaseURL
 func (a *Agent) detectProviderType() llm.ProviderType {
-	if strings.Contains(a.cfg.BaseURL, "anthropic") {
-		return llm.ProviderAnthropic
-	} else if strings.Contains(a.cfg.BaseURL, "google") || strings.Contains(a.cfg.BaseURL, "generativelanguage") {
-		return llm.ProviderGoogle
-	} else if strings.Contains(a.cfg.BaseURL, "minimax") {
-		return llm.ProviderMiniMax
-	} else if strings.Contains(a.cfg.BaseURL, "ollama") {
-		return llm.ProviderOllama
-	} else if strings.Contains(a.cfg.BaseURL, "openrouter") {
-		return llm.ProviderOpenRouter
-	} else if strings.Contains(a.cfg.BaseURL, "moonshot") {
-		return llm.ProviderMoonshot
-	} else if strings.Contains(a.cfg.BaseURL, "zhipu") || strings.Contains(a.cfg.BaseURL, "glm") {
-		return llm.ProviderGLM
-	} else if strings.Contains(a.cfg.BaseURL, "qianfan") {
-		return llm.ProviderQianfan
-	} else if strings.Contains(a.cfg.BaseURL, "bedrock") {
-		return llm.ProviderBedrock
-	} else if strings.Contains(a.cfg.BaseURL, "vercel") {
-		return llm.ProviderVercel
-	} else if strings.Contains(a.cfg.BaseURL, "z.ai") || strings.Contains(a.cfg.BaseURL, "z ai") {
-		return llm.ProviderZAi
+	baseURL := strings.ToLower(a.cfg.BaseURL)
+	for _, pk := range providerKeywords {
+		if strings.Contains(baseURL, pk.keyword) {
+			return pk.provider
+		}
 	}
 	return llm.ProviderOpenAI
 }
@@ -356,18 +367,31 @@ func (a *Agent) handleContextOverflow(sessionKey string, messages []Message) []M
 	return messages
 }
 
+func estimateTokensForString(content string) int {
+	ascii := 0
+	nonASCII := 0
+	for _, r := range content {
+		if r <= 127 {
+			ascii++
+		} else {
+			nonASCII++
+		}
+	}
+	return ascii/4 + int(float64(nonASCII)*1.5)
+}
+
 // estimateTokens estimates token count for agent Messages (not storage.Message)
 func estimateTokens(msgs []Message) int {
 	total := 0
 	for _, m := range msgs {
-		total += len(m.Content) / 4
+		total += estimateTokensForString(m.Content)
 		for _, tc := range m.ToolCalls {
-			total += len(tc.Function.Arguments) / 4
+			total += estimateTokensForString(tc.Function.Arguments)
 		}
 		for _, tr := range m.ToolExecutionResults {
 			if tr.Result != nil {
 				if s, ok := tr.Result.(string); ok {
-					total += len(s) / 4
+					total += estimateTokensForString(s)
 				}
 			}
 		}

@@ -115,19 +115,19 @@ func cleanupProcesses() {
 
 // monitorProcesses checks for crashed processes and restarts them if auto-restart is enabled
 func monitorProcesses() {
-	monitorMutex.RLock()
-	interval := monitorInterval
-	enabled := monitorEnabled
-	monitorMutex.RUnlock()
+	for {
+		monitorMutex.RLock()
+		interval := monitorInterval
+		enabled := monitorEnabled
+		monitorMutex.RUnlock()
 
-	if !enabled {
-		return
-	}
+		if !enabled {
+			time.Sleep(1 * time.Second) // Check again after a second if disabled
+			continue
+		}
 
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
+		time.Sleep(interval)
 
-	for range ticker.C {
 		monitorMutex.RLock()
 		enabled = monitorEnabled
 		monitorMutex.RUnlock()
@@ -136,67 +136,71 @@ func monitorProcesses() {
 			continue
 		}
 
-		// Collect processes to restart
-		var toRestart []struct {
-			id     string
-			proc   *ProcessInfo
-			reason string
+		checkAndRestartProcesses()
+	}
+}
+
+func checkAndRestartProcesses() {
+	// Collect processes to restart
+	var toRestart []struct {
+		id     string
+		proc   *ProcessInfo
+		reason string
+	}
+
+	procMutex.RLock()
+	for id, proc := range processes {
+		// Check if process is dead
+		if proc.Cmd == nil || proc.Cmd.ProcessState == nil {
+			continue
 		}
 
-		procMutex.RLock()
-		for id, proc := range processes {
-			// Check if process is dead
-			if proc.Cmd == nil || proc.Cmd.ProcessState == nil {
-				continue
-			}
+		exited := proc.Cmd.ProcessState.Exited()
 
-			exited := proc.Cmd.ProcessState.Exited()
-
-			// If process has exited and auto-restart is enabled
-			// NOTE: Don't modify CurrentRetries under read lock!
-			if exited && proc.AutoRestart {
-				// Collect for later processing (outside lock)
-				toRestart = append(toRestart, struct {
-					id     string
-					proc   *ProcessInfo
-					reason string
-				}{id, proc, "process exited"})
-			}
+		// If process has exited and auto-restart is enabled
+		// NOTE: Don't modify CurrentRetries under read lock!
+		if exited && proc.AutoRestart {
+			// Collect for later processing (outside lock)
+			toRestart = append(toRestart, struct {
+				id     string
+				proc   *ProcessInfo
+				reason string
+			}{id, proc, "process exited"})
 		}
-		procMutex.RUnlock()
+	}
+	procMutex.RUnlock()
 
-		// Process restarts outside the lock
-		for _, r := range toRestart {
-			// Use write lock for modifying CurrentRetries
-			procMutex.Lock()
-			if proc, ok := processes[r.id]; ok {
-				proc.CurrentRetries++
-				currentRetries := proc.CurrentRetries
-				maxRetries := proc.MaxRetries
-				procMutex.Unlock()
+	// Process restarts outside the lock
+	for _, r := range toRestart {
+		// Use write lock for modifying CurrentRetries
+		procMutex.Lock()
+		if proc, ok := processes[r.id]; ok {
+			proc.CurrentRetries++
+			currentRetries := proc.CurrentRetries
+			maxRetries := proc.MaxRetries
+			procMutex.Unlock()
 
-				if currentRetries <= maxRetries {
-					log.Printf("[RELOAD] Auto-restarting process %s (reason: %s, retry %d/%d)",
-						r.id, r.reason, currentRetries, maxRetries)
+			if currentRetries <= maxRetries {
+				log.Printf("[RELOAD] Auto-restarting process %s (reason: %s, retry %d/%d)",
+					r.id, r.reason, currentRetries, maxRetries)
 
-					// Wait a bit before restarting
-					if r.proc.RestartDelay > 0 {
-						time.Sleep(r.proc.RestartDelay)
-					}
+				// Wait a bit before restarting
+				if r.proc.RestartDelay > 0 {
+					time.Sleep(r.proc.RestartDelay)
+				}
 
-					// Restart the process
-					_, err := restartProcess(r.proc)
-					if err != nil {
-						log.Printf("[ERROR] Failed to restart process %s: %v", r.id, err)
-					} else {
-						log.Printf("[OK] Process %s restarted successfully", r.id)
-					}
+				// Restart the process
+				_, err := restartProcess(r.proc)
+				if err != nil {
+					log.Printf("[ERROR] Failed to restart process %s: %v", r.id, err)
 				} else {
-					log.Printf("[WARN] Process %s exceeded max retries (%d), not restarting", r.id, maxRetries)
+					log.Printf("[OK] Process %s restarted successfully", r.id)
 				}
 			} else {
-				procMutex.Unlock()
+				log.Printf("[WARN] Process %s exceeded max retries (%d), not restarting", r.id, maxRetries)
 			}
+		} else {
+			procMutex.Unlock()
 		}
 	}
 }
@@ -642,13 +646,16 @@ func (t *ProcessTool) kill(args map[string]interface{}) (interface{}, error) {
 		p.StdinPipe.Close()
 	}
 
-	if err := p.Cmd.Process.Kill(); err != nil {
-		return nil, fmt.Errorf("kill failed: %v", err)
-	}
+	err := p.Cmd.Process.Kill()
 
+	// Remove process from tracking even if kill fails (e.g. already dead)
 	procMutex.Lock()
 	delete(processes, sessionId)
 	procMutex.Unlock()
+
+	if err != nil && !strings.Contains(err.Error(), "process already finished") {
+		return nil, fmt.Errorf("kill failed: %v", err)
+	}
 
 	return map[string]interface{}{
 		"sessionId": sessionId,

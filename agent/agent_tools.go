@@ -16,11 +16,14 @@ func (a *Agent) executeToolCalls(toolCalls []ToolCall) []ToolResult {
 
 	// Tool loop detection - check before executing
 	if a.toolLoopDetector != nil {
-		for _, call := range toolCalls {
-			hasLoop, reason := a.toolLoopDetector.CheckLoop()
-			if hasLoop {
-				log.Printf("[Agent] Tool loop detected: %s", reason)
-				return []ToolResult{{
+		// 先探测一次是否处于循环泥潭
+		hasLoop, reason := a.toolLoopDetector.CheckLoop()
+		if hasLoop {
+			log.Printf("[Agent] Tool loop detected: %s", reason)
+
+			loopResults := make([]ToolResult, 0, len(toolCalls))
+			for _, call := range toolCalls {
+				loopResults = append(loopResults, ToolResult{
 					ID:   call.ID,
 					Type: "function",
 					Result: map[string]interface{}{
@@ -28,9 +31,13 @@ func (a *Agent) executeToolCalls(toolCalls []ToolCall) []ToolResult {
 						"tool":    call.Function.Name,
 						"success": false,
 					},
-				}}
+				})
 			}
-			// Record this tool call
+			return loopResults
+		}
+
+		// 若无循环，批量记录本回合的全部记录卡
+		for _, call := range toolCalls {
 			a.toolLoopDetector.RecordCall(call.Function.Name, call.Function.Arguments)
 		}
 	}
@@ -322,14 +329,7 @@ func parseSimpleToolCalls(content string) []ToolCall {
 			continue
 		}
 
-		knownTools := map[string]bool{
-			"read": true, "write": true, "edit": true, "exec": true,
-			"process": true, "browser": true, "message": true, "cron": true,
-			"memory_search": true, "memory_get": true, "sessions_send": true,
-			"subagents": true, "image": true, "tts": true, "web_fetch": true,
-		}
-
-		if !knownTools[toolName] {
+		if !knownToolsSet[toolName] {
 			continue
 		}
 
@@ -374,6 +374,12 @@ type ToolResponse struct {
 }
 
 var (
+	knownToolsSet = map[string]bool{
+		"read": true, "write": true, "edit": true, "exec": true,
+		"process": true, "browser": true, "message": true, "cron": true,
+		"memory_search": true, "memory_get": true, "sessions_send": true,
+		"subagents": true, "image": true, "tts": true, "web_fetch": true,
+	}
 	reEdit1     = regexp.MustCompile(`(?i)Edit\s+([^:]+):\s*replace\s+(.+)\s+with\s+(.+)`)
 	reEdit2     = regexp.MustCompile(`(?i)Edit\s+([^:]+):\s*change\s+(.+)\s+to\s+(.+)`)
 	reEdit3     = regexp.MustCompile(`(?i)Replace\s+(.+)\s+with\s+(.+)\s+in\s+(.+)`)

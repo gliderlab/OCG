@@ -2,6 +2,7 @@ package memory
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -56,5 +57,143 @@ func TestLoadExistingVectorsSkipsDimMismatch(t *testing.T) {
 
 	if len(store.hnswIDs) != 0 {
 		t.Fatalf("expected no hnsw ids due to dim mismatch, got %d", len(store.hnswIDs))
+	}
+}
+
+// MockProvider is used to avoid external requests during tests
+type MockProvider struct {
+	dim int
+}
+
+func (m *MockProvider) Embed(text string) ([]float32, error) {
+	// Return a static or simple vector for tests
+	vec := make([]float32, m.dim)
+	for i := 0; i < m.dim; i++ {
+		vec[i] = float32(i) * 0.1
+	}
+	return vec, nil
+}
+
+func (m *MockProvider) Dim() int {
+	return m.dim
+}
+
+func (m *MockProvider) Name() string {
+	return "mock"
+}
+
+func TestVectorStore_CRUD(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "vec.db")
+
+	store, err := NewVectorMemoryStore(dbPath, Config{EmbeddingDim: 3})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	defer store.Close()
+
+	store.embedding = &MockProvider{dim: 3}
+
+	// Add
+	id1, err := store.Store("test item 1", "fact", 0.8)
+	if err != nil {
+		t.Fatalf("Add error: %v", err)
+	}
+
+	id2, err := store.Store("test item 2", "preference", 0.9)
+	if err != nil {
+		t.Fatalf("Add error: %v", err)
+	}
+
+	// Search
+	results, err := store.Search("test search", 10, 0.0)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatalf("expected results but got 0")
+	}
+
+	// Delete
+	_, err = store.Delete(id1)
+	if err != nil {
+		t.Fatalf("Delete error: %v", err)
+	}
+
+	// Search again
+	results, err = store.Search("test search", 10, 0.0)
+	if err != nil {
+		t.Fatalf("Search error: %v", err)
+	}
+	for _, res := range results {
+		if res.Entry.ID == id1 {
+			t.Fatalf("expected %s to be deleted", id1)
+		}
+	}
+
+	// Get
+	entry, err := store.Get(id2)
+	if err != nil {
+		t.Fatalf("Get error: %v", err)
+	}
+	if entry.ID != id2 {
+		t.Fatalf("expected entry %s, got %v", id2, entry.ID)
+	}
+}
+
+func TestVectorStore_ConcurrentAccess(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "vec.db")
+
+	store, err := NewVectorMemoryStore(dbPath, Config{EmbeddingDim: 3})
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	defer store.Close()
+
+	store.embedding = &MockProvider{dim: 3}
+
+	var wg sync.WaitGroup
+	workers := 10
+	itemsPerWorker := 10
+
+	errs := make(chan error, workers*itemsPerWorker)
+
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			for j := 0; j < itemsPerWorker; j++ {
+				_, err := store.Store("concurrent text", "fact", 0.5)
+				if err != nil {
+					errs <- err
+				}
+				// Also do some reads
+				_, err = store.Search("concurrent", 5, 0.0)
+				if err != nil {
+					errs <- err
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent error: %v", err)
+		}
+	}
+
+	// Verify all items added
+	var count int
+	err = store.db.QueryRow("SELECT COUNT(*) FROM vector_memories").Scan(&count)
+	if err != nil {
+		t.Fatalf("query count error: %v", err)
+	}
+	if count != workers*itemsPerWorker {
+		t.Fatalf("expected %d items but got %d", workers*itemsPerWorker, count)
 	}
 }
