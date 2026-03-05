@@ -77,8 +77,8 @@ type Gateway struct {
 	server         *http.Server
 	channelAdapter *channels.ChannelAdapter
 	cronHandler    *cron.CronHandler
-	webhookHandler *WebhookHandler // Webhook handler
-	hooksRegistry  *hooks.HookRegistry  // Hooks registry
+	webhookHandler *WebhookHandler     // Webhook handler
+	hooksRegistry  *hooks.HookRegistry // Hooks registry
 	store          interface {
 		CheckRateLimit(endpoint, key string) (bool, error)
 	}
@@ -95,9 +95,9 @@ type Gateway struct {
 	wsIPConns   map[string]int32 // Per-IP connection count
 
 	// Config hot reload
-	configFile     string
-	configWatcher  interface{ Close() error }
-	reloadCh       chan struct{}
+	configFile    string
+	configWatcher interface{ Close() error }
+	reloadCh      chan struct{}
 }
 
 // HTTPClient interface for dependency injection
@@ -276,7 +276,7 @@ func (g *Gateway) SetWebhookStorage(store *storage.Storage) {
 			if chType == "" {
 				return fmt.Errorf("unknown channel: %s", channel)
 			}
-			
+
 			// Parse target as chat ID (int64)
 			var chatID int64
 			if target != "" && target != "last" {
@@ -288,7 +288,7 @@ func (g *Gateway) SetWebhookStorage(store *storage.Storage) {
 					chatID = parsed
 				}
 			}
-			
+
 			_, err := g.channelAdapter.SendMessage(chType, &channels.SendMessageRequest{
 				ChatID: chatID,
 				Text:   message,
@@ -628,8 +628,13 @@ func (g *Gateway) Start() error {
 	})
 	// Set webhook callback for cron delivery
 	g.cronHandler.SetWebhookCallback(func(url, payload string) error {
-		// Perform HTTP POST to webhook URL
-		resp, err := http.Post(url, "application/json", strings.NewReader(payload))
+		// Perform HTTP POST to webhook URL using pooled client
+		req, err := http.NewRequest("POST", url, strings.NewReader(payload))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := defaultHTTPClientInstance.Do(req)
 		if err != nil {
 			return err
 		}
@@ -912,7 +917,7 @@ func (g *Gateway) handleChat(w http.ResponseWriter, r *http.Request) {
 					flusher.Flush()
 					continue
 				}
-				
+
 				// Regular content - send as chat chunk
 				data := map[string]interface{}{
 					"id":      "chatcmpl-" + g.idGenerator.New(),
@@ -978,93 +983,53 @@ func (g *Gateway) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(`{"status":"ok"}`))
 }
 
-// handleAgentHealth checks if the agent is running
-func (g *Gateway) handleAgentHealth(w http.ResponseWriter, r *http.Request) {
-	// Use configured PID dir instead of hardcoded path
+// checkPIDHealth checks if a process is running based on its PID file
+func (g *Gateway) checkPIDHealth(w http.ResponseWriter, pidFileName string) {
 	pidDir := g.cfg.PidDir
 	if pidDir == "" {
 		pidDir = config.DefaultPidDir()
 	}
-	pidFile := filepath.Join(pidDir, "ocg-agent.pid")
-	
+	pidFile := filepath.Join(pidDir, pidFileName)
+
 	pidData, err := os.ReadFile(pidFile)
 	if err != nil {
 		writeJSON(w, map[string]string{"status": "offline", "reason": "no_pid_file"})
 		return
 	}
-	
-	// Parse PID and timestamp from pid file (format: "pid timestamp")
+
+	// Parse PID from pid file (format: "pid timestamp")
 	parts := strings.Fields(string(pidData))
 	if len(parts) < 1 {
 		writeJSON(w, map[string]string{"status": "offline", "reason": "invalid_pid_file"})
 		return
 	}
-	
+
 	pid, err := strconv.Atoi(parts[0])
 	if err != nil || pid <= 0 {
 		writeJSON(w, map[string]string{"status": "offline", "reason": "invalid_pid"})
 		return
 	}
-	
-	// Use cross-platform process check
-	if pid > 0 {
-		// Check if process exists (cross-platform)
-		p, err := os.FindProcess(pid)
-		if err == nil {
-			// On Unix, FindProcess always succeeds, we need to actually check
-			// On Windows, FindProcess returns valid process even if exited
-			err = p.Signal(syscall.Signal(0))
-			if err == nil {
-				writeJSON(w, map[string]string{"status": "online"})
-				return
-			}
-			// For Windows, os.FindProcess doesn't reliably detect exited processes
-			// But signal(0) works on Unix to check existence without actually signaling
+
+	// Check if process exists (cross-platform)
+	p, err := os.FindProcess(pid)
+	if err == nil && p != nil {
+		// On Unix, Signal(0) checks existence without sending a signal
+		if err := p.Signal(syscall.Signal(0)); err == nil {
+			writeJSON(w, map[string]string{"status": "online"})
+			return
 		}
 	}
 	writeJSON(w, map[string]string{"status": "offline", "reason": "process_not_found"})
 }
 
+// handleAgentHealth checks if the agent is running
+func (g *Gateway) handleAgentHealth(w http.ResponseWriter, r *http.Request) {
+	g.checkPIDHealth(w, "ocg-agent.pid")
+}
+
 // handleEmbeddingHealth checks if the embedding service is running
 func (g *Gateway) handleEmbeddingHealth(w http.ResponseWriter, r *http.Request) {
-	// Use configured PID dir instead of hardcoded path
-	pidDir := g.cfg.PidDir
-	if pidDir == "" {
-		pidDir = config.DefaultPidDir()
-	}
-	pidFile := filepath.Join(pidDir, "ocg-embedding.pid")
-	
-	pidData, err := os.ReadFile(pidFile)
-	if err != nil {
-		writeJSON(w, map[string]string{"status": "offline", "reason": "no_pid_file"})
-		return
-	}
-	
-	// Parse PID and timestamp from pid file
-	parts := strings.Fields(string(pidData))
-	if len(parts) < 1 {
-		writeJSON(w, map[string]string{"status": "offline", "reason": "invalid_pid_file"})
-		return
-	}
-	
-	pid, err := strconv.Atoi(parts[0])
-	if err != nil || pid <= 0 {
-		writeJSON(w, map[string]string{"status": "offline", "reason": "invalid_pid"})
-		return
-	}
-	
-	// Check if process exists (cross-platform)
-	if pid > 0 {
-		p, err := os.FindProcess(pid)
-		if err == nil {
-			err = p.Signal(syscall.Signal(0))
-			if err == nil {
-				writeJSON(w, map[string]string{"status": "online"})
-				return
-			}
-		}
-	}
-	writeJSON(w, map[string]string{"status": "offline", "reason": "process_not_found"})
+	g.checkPIDHealth(w, "ocg-embedding.pid")
 }
 
 func (g *Gateway) handleStorageStats(w http.ResponseWriter, r *http.Request) {
@@ -1110,7 +1075,7 @@ func (g *Gateway) handleSessions(w http.ResponseWriter, r *http.Request) {
 
 	type SessionResponse struct {
 		Sessions []map[string]interface{} `json:"sessions"`
-		Count    int32                   `json:"count"`
+		Count    int32                    `json:"count"`
 	}
 
 	sessions := make([]map[string]interface{}, 0, len(reply.Sessions))

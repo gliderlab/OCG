@@ -123,7 +123,7 @@ type Event struct {
 	// Hook-specific fields
 	EventType string `json:"event_type,omitempty"` // hook:command:new, hook:message:received
 	HookName  string `json:"hook_name,omitempty"`  // session-memory, command-logger
-	Metadata  string `json:"metadata,omitempty"`    // JSON additional data
+	Metadata  string `json:"metadata,omitempty"`   // JSON additional data
 }
 
 func New(dbPath string) (*Storage, error) {
@@ -904,28 +904,49 @@ func (s *Storage) ListFiles() ([]FileRecord, error) {
 // ============ Tools ============
 
 func (s *Storage) Close() error {
+	// Close prepared statements to prevent resource leaks
+	for _, stmt := range []*sql.Stmt{
+		s.stmtAddMessage, s.stmtGetMessages, s.stmtClearMessages,
+		s.stmtArchiveMessage, s.stmtGetMemory, s.stmtSetMemory,
+		s.stmtSearchMemory, s.stmtGetConfig, s.stmtSetConfig,
+	} {
+		if stmt != nil {
+			stmt.Close()
+		}
+	}
 	return s.db.Close()
 }
 
 func (s *Storage) Stats() (map[string]int, error) {
 	stats := make(map[string]int)
 
-	// Single query for all counts
+	// Count messages, files, sessions (always available)
 	row := s.db.QueryRow(`
 		SELECT 
 			(SELECT COUNT(*) FROM messages),
-			(SELECT COUNT(*) FROM vector_memories),
 			(SELECT COUNT(*) FROM files),
 			(SELECT COUNT(*) FROM session_meta)
 	`)
-	var msgs, mems, files, sessions int
-	if err := row.Scan(&msgs, &mems, &files, &sessions); err != nil {
+	var msgs, files, sessions int
+	if err := row.Scan(&msgs, &files, &sessions); err != nil {
 		return nil, err
 	}
 	stats["messages"] = msgs
-	stats["memories"] = mems
 	stats["files"] = files
 	stats["sessions"] = sessions
+
+	// vector_memories may not exist in this DB (it's in the memory module's DB)
+	var mems int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM vector_memories`).Scan(&mems); err == nil {
+		stats["memories"] = mems
+	} else {
+		// Try legacy memories table
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM memories`).Scan(&mems); err == nil {
+			stats["memories"] = mems
+		} else {
+			stats["memories"] = 0
+		}
+	}
 
 	return stats, nil
 }
@@ -1677,30 +1698,30 @@ func (s *Storage) RetryFailedTask(taskID string) (bool, error) {
 // ============ User Task Splitting ============
 
 type UserTask struct {
-	ID           string  `json:"id"`
-	Session      string  `json:"session"`
-	CreatedAt    int64   `json:"created_at"`
-	CompletedAt  *int64  `json:"completed_at,omitempty"`
-	StartedAt    *int64  `json:"started_at,omitempty"`
-	Total        int     `json:"total"`
-	Completed    int     `json:"completed"`
-	Status       string  `json:"status"`
-	Instructions string  `json:"instructions"`
-	Result       string  `json:"result,omitempty"`
-	Error        string  `json:"error,omitempty"`
+	ID           string `json:"id"`
+	Session      string `json:"session"`
+	CreatedAt    int64  `json:"created_at"`
+	CompletedAt  *int64 `json:"completed_at,omitempty"`
+	StartedAt    *int64 `json:"started_at,omitempty"`
+	Total        int    `json:"total"`
+	Completed    int    `json:"completed"`
+	Status       string `json:"status"`
+	Instructions string `json:"instructions"`
+	Result       string `json:"result,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 type UserSubtask struct {
-	ID          string  `json:"id"`
-	TaskID      string  `json:"task_id"`
-	IndexNum    int     `json:"index_num"`
-	Description string  `json:"description"`
-	Status      string  `json:"status"`
-	Result      string  `json:"result,omitempty"`
-	Process     string  `json:"process,omitempty"`
-	StartedAt   *int64  `json:"started_at,omitempty"`
-	CompletedAt *int64  `json:"completed_at,omitempty"`
-	Error       string  `json:"error,omitempty"`
+	ID          string `json:"id"`
+	TaskID      string `json:"task_id"`
+	IndexNum    int    `json:"index_num"`
+	Description string `json:"description"`
+	Status      string `json:"status"`
+	Result      string `json:"result,omitempty"`
+	Process     string `json:"process,omitempty"`
+	StartedAt   *int64 `json:"started_at,omitempty"`
+	CompletedAt *int64 `json:"completed_at,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 type ArchiveStats struct {
@@ -1931,4 +1952,3 @@ func (s *Storage) GetUserTasksBySession(session string, limit int) ([]UserTask, 
 	}
 	return tasks, nil
 }
-

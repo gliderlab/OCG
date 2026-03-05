@@ -300,7 +300,7 @@ func (g *Gateway) handleWSChat(ctx context.Context, conn *websocket.Conn, writeM
 			writeCancel()
 
 			if writeErr != nil {
-				log.Printf("[WS] Write error: %v", err)
+				log.Printf("[WS] Write error: %v", writeErr)
 				g.sendWSError(ctx, conn, writeMu, "write error: "+writeErr.Error())
 				return
 			}

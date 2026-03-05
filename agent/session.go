@@ -165,7 +165,7 @@ func (sm *SessionManager) AddMessage(key string, msg Message) error {
 	return nil
 }
 
-// GetMessages returns all messages in a session
+// GetMessages returns a copy of all messages in a session
 func (sm *SessionManager) GetMessages(key string) ([]Message, error) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
@@ -175,7 +175,12 @@ func (sm *SessionManager) GetMessages(key string) ([]Message, error) {
 		return nil, fmt.Errorf("session not found: %s", key)
 	}
 
-	return session.Messages, nil
+	// Return a copy to prevent external mutation of internal state
+	copy := make([]Message, len(session.Messages))
+	for i, m := range session.Messages {
+		copy[i] = m
+	}
+	return copy, nil
 }
 
 // ClearSession clears a session's messages
@@ -370,6 +375,8 @@ type SessionInfo struct {
 
 // GetSessionInfo returns session info
 func (sm *SessionManager) GetSessionInfo(key string) (*SessionInfo, error) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
 	session, ok := sm.sessions[key]
 	if !ok {
 		return nil, fmt.Errorf("session not found: %s", key)
