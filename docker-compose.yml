@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  ocg:
+    build: .
+    image: ocg-ai:latest
+    container_name: ocg-agent
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Map the data directory to persist SQLite DB, uploaded files, and config
+      - ./data:/app/data
+    environment:
+      - OCG_DATA_DIR=/app/data
+      - OCG_HOST=0.0.0.0
+      - OCG_PORT=8080
+      # You can add additional required environment variables here:
+      # - OCG_TOKEN=your_ui_admin_token
+      # - OPENAI_API_KEY=your_openai_key
+      # - ANTHROPIC_API_KEY=your_anthropic_key
+
+    # Optional: health check to ensure the service is running
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    
+    # Configure logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
