@@ -1725,7 +1725,7 @@
 
     /* Token */
     function gT() { return sessionStorage.getItem('ocg_t') || localStorage.getItem('ocg_t') || '' }
-    function sT(v) { sessionStorage.setItem('ocg_t', v) }
+    function sT(v) { sessionStorage.setItem('ocg_t', v); localStorage.setItem('ocg_t', v) }
     function aH() { const k = gT(); return k ? { Authorization: 'Bearer ' + k } : {} }
     function aHJ() { return { 'Content-Type': 'application/json', ...aH() } }
 
@@ -1911,7 +1911,7 @@
     function renderThink(raw) {
       if (thinkLevel === 0) return '';
       const cls = thinkLevel === 1 ? 'tk tk-mini' : thinkLevel === 2 ? 'tk tk-mid' : 'tk';
-      return `<details class="${cls}"><summary>💭 ${t('thinking')}</summary><div class="tk-body">${esc(String(raw || '').trim())}</div></details>`;
+      return `<details class="${cls}"><summary>💭 ${t('thinking')}</summary><div class="tk-body">${renderMixed(String(raw || '').trim())}</div></details>`;
     }
 
     let wsAccumulatedContent = '';
@@ -1922,7 +1922,11 @@
         if (chunk) {
           wsAccumulatedContent += chunk;
           const span = $('tm')?.querySelector('.typing');
-          if (span) span.textContent = streamPreview(wsAccumulatedContent);
+          if (span) {
+            span.textContent = streamPreview(wsAccumulatedContent);
+            const cms = $('cms');
+            if (cms && cms.scrollHeight - cms.scrollTop - cms.clientHeight < 120) cms.scrollTop = cms.scrollHeight;
+          }
         }
       } else if (m.type === 'done') {
         wsAccumulatedContent = '';
@@ -2060,7 +2064,11 @@
               if (piece) {
                 assistantMsg += piece;
                 const span = msgEl?.querySelector('.typing');
-                if (span) span.textContent = streamPreview(assistantMsg);
+                if (span) {
+                  span.textContent = streamPreview(assistantMsg);
+                  const cms = $('cms');
+                  if (cms && cms.scrollHeight - cms.scrollTop - cms.clientHeight < 120) cms.scrollTop = cms.scrollHeight;
+                }
               }
             } catch { }
           }
