@@ -23,6 +23,8 @@ type Skill struct {
 	EnvRequires []string    // Required environment variables
 	OS          []string    // Supported OSes
 	Always      bool        // Always load regardless of requirements
+	HasNodeJS   bool        // Has index.js
+	HasPython   bool        // Has main.py
 }
 
 // InstallItem represents a skill installation method
@@ -66,6 +68,14 @@ func LoadSkillFromDir(dir string) (*Skill, error) {
 	// Parse frontmatter
 	if err := parseFrontmatter(string(data), skill); err != nil {
 		return nil, fmt.Errorf("parse frontmatter: %w", err)
+	}
+
+	// Check for script files
+	if _, err := os.Stat(filepath.Join(dir, "index.js")); err == nil {
+		skill.HasNodeJS = true
+	}
+	if _, err := os.Stat(filepath.Join(dir, "main.py")); err == nil {
+		skill.HasPython = true
 	}
 
 	return skill, nil

@@ -125,10 +125,7 @@ func TestProcessTool_PtyExecution(t *testing.T) {
 func TestProcessTool_AutoRestart(t *testing.T) {
 	tool := &ProcessTool{}
 
-	cmdFailStr := "fail-command-not-found"
-	if runtime.GOOS == "windows" {
-		cmdFailStr = "cmd /c exit 1"
-	}
+	cmdFailStr := "go run nonexistent_file.go"
 	// Start a command that exits immediately, with auto-restart enabled
 	args := map[string]interface{}{
 		"action":              "start",

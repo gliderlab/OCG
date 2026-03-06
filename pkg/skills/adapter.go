@@ -62,6 +62,10 @@ func (a *Adapter) GenerateTools() []tools.Tool {
 func (a *Adapter) createSkillTool(skill *Skill) tools.Tool {
 	// Determine skill type and create appropriate tool
 	switch {
+	case skill.HasNodeJS:
+		return newNodeSkillTool(skill)
+	case skill.HasPython:
+		return newPythonSkillTool(skill)
 	case isShellSkill(skill):
 		return newShellSkillTool(skill)
 	case isCLISkill(skill):
@@ -344,4 +348,116 @@ func ExtractSkillName(toolName string) string {
 		return strings.TrimPrefix(toolName, "skill_")
 	}
 	return ""
+}
+
+// nodeSkillTool - executes Node.js skills (index.js)
+type nodeSkillTool struct {
+	skill *Skill
+}
+
+func newNodeSkillTool(skill *Skill) tools.Tool {
+	return &nodeSkillTool{skill: skill}
+}
+
+func (t *nodeSkillTool) Name() string {
+	return "skill_" + t.skill.Name
+}
+
+func (t *nodeSkillTool) Description() string {
+	return t.skill.Description
+}
+
+func (t *nodeSkillTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"args": map[string]interface{}{
+				"type":        "string",
+				"description": "Arguments to pass to the Node.js script",
+			},
+		},
+	}
+}
+
+func (t *nodeSkillTool) Execute(args map[string]interface{}) (interface{}, error) {
+	argsStr := tools.GetString(args, "args")
+	
+	scriptPath := filepath.Join(t.skill.Path, "index.js")
+	var cmdArgs []string
+	cmdArgs = append(cmdArgs, scriptPath)
+
+	if argsStr != "" {
+		parts, err := shlex.Split(argsStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse args: %w", err)
+		}
+		cmdArgs = append(cmdArgs, parts...)
+	}
+
+	cmd := exec.Command("node", cmdArgs...)
+	cmd.Dir = t.skill.Path
+	cmd.Env = os.Environ()
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("Node.js script failed: %w", err)
+	}
+
+	return string(output), nil
+}
+
+// pythonSkillTool - executes Python skills (main.py)
+type pythonSkillTool struct {
+	skill *Skill
+}
+
+func newPythonSkillTool(skill *Skill) tools.Tool {
+	return &pythonSkillTool{skill: skill}
+}
+
+func (t *pythonSkillTool) Name() string {
+	return "skill_" + t.skill.Name
+}
+
+func (t *pythonSkillTool) Description() string {
+	return t.skill.Description
+}
+
+func (t *pythonSkillTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"args": map[string]interface{}{
+				"type":        "string",
+				"description": "Arguments to pass to the Python script",
+			},
+		},
+	}
+}
+
+func (t *pythonSkillTool) Execute(args map[string]interface{}) (interface{}, error) {
+	argsStr := tools.GetString(args, "args")
+	
+	scriptPath := filepath.Join(t.skill.Path, "main.py")
+	var cmdArgs []string
+	cmdArgs = append(cmdArgs, scriptPath)
+
+	if argsStr != "" {
+		parts, err := shlex.Split(argsStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse args: %w", err)
+		}
+		cmdArgs = append(cmdArgs, parts...)
+	}
+
+	cmd := exec.Command("python3", cmdArgs...)
+	cmd.Dir = t.skill.Path
+	cmd.Env = os.Environ()
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("Python script failed: %w", err)
+	}
+
+	return string(output), nil
 }
