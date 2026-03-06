@@ -50,6 +50,7 @@
 ### 07. Memory
 - [Memory System](../07-memory/overview.md) | [记忆系统](07-memory/overview-zh.md)
 - [Vector Memory](07-memory/vector.md) | [向量记忆](07-memory/vector-zh.md)
+- [Knowledge Graph](07-memory/graph.md) | [知识图谱](07-memory/graph-zh.md)
 - [Session Memory](07-memory/sessions.md) | [会话记忆](07-memory/sessions-zh.md)
 - [Compaction](07-memory/compaction.md) | [记忆压缩](07-memory/compaction-zh.md)
 

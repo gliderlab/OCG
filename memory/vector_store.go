@@ -34,6 +34,7 @@ type VectorMemoryStore struct {
 	embedding        EmbeddingProvider
 	ftsAvailable     bool
 	cfg              Config
+	Graph            *GraphStore
 }
 
 // Config
@@ -301,6 +302,14 @@ func NewVectorMemoryStore(dbPath string, cfg Config) (*VectorMemoryStore, error)
 	}
 
 	store := &VectorMemoryStore{db: db, cfg: cfg}
+	
+	graphStore, err := NewGraphStore(db)
+	if err != nil {
+		log.Printf("[WARN] Graph store init failed: %v", err)
+	} else {
+		store.Graph = graphStore
+	}
+
 	if err := store.ensureFTS(); err != nil {
 		log.Printf("FTS init failed: %v", err)
 	} else {

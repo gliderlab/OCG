@@ -11,6 +11,8 @@
 - **操作系统**: Linux (推荐 Ubuntu/Debian)、macOS、Windows (WSL2)
 - **Go**: 1.22 或更高版本
 - **GCC**: SQLite CGO 绑定必需
+- **Node.js**: 推荐 (用于运行基于 JS 的技能)
+- **Python 3**: 推荐 (用于运行基于 Python 的技能)
 - **内存**: 最低 512MB RAM (推荐 1GB+)
 - **存储**: 约 500MB (二进制文件 + 模型)
 

@@ -62,7 +62,6 @@ func findSkillsDir() string {
 		"./skills",
 		"skills",
 		filepath.Join(os.Getenv("HOME"), ".openclaw", "skills"),
-		"/usr/lib/node_modules/openclaw/skills",
 	}
 
 	for _, loc := range locations {
@@ -94,7 +93,7 @@ func LoadSkills(skillsDir string) (*Registry, *Adapter, error) {
 // ImportFromOpenClaw imports skills from OCG's bundled skills
 func ImportFromOpenClaw(targetDir string) error {
 	srcDirs := []string{
-		"/usr/lib/node_modules/openclaw/skills",
+		"../openclaw/skills",
 		filepath.Join(os.Getenv("HOME"), ".npm", "lib", "node_modules", "openclaw", "skills"),
 	}
 

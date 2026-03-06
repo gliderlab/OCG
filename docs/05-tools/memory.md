@@ -112,6 +112,30 @@ memory_store(content="Configuration updated for production", tags=["config", "pr
 
 ---
 
+## memory_graph
+
+Interact with the Knowledge Graph to extract and save structured relationships.
+
+### Usage
+
+```bash
+memory_graph(action="add_entity", name="OCG", entity_type="project")
+```
+
+### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `action` | string | Action: `add_entity`, `add_relation`, `get_entity`, `search_relations` |
+| `name` | string | Entity name (for entity actions) |
+| `entity_type` | string | Type of entity (for `add_entity`) |
+| `description` | string | Description (for `add_entity`) |
+| `source` | string | Source entity (for `add_relation`) |
+| `target` | string | Target entity (for `add_relation`) |
+| `relation` | string | Relation type (for `add_relation`) |
+
+---
+
 ## Memory Files
 
 ### Structure

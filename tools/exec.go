@@ -129,7 +129,7 @@ func (t *ExecTool) Execute(args map[string]interface{}) (interface{}, error) {
 		if runtime.GOOS == "windows" {
 			cmd = exec.CommandContext(ctx, "cmd", "/c", command)
 		} else {
-			cmd = exec.CommandContext(ctx, "/bin/sh", "-c", command)
+			cmd = exec.CommandContext(ctx, "sh", "-c", command)
 		}
 	} else {
 		// Parse command without shell for simple commands (safer)

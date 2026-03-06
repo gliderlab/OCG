@@ -40,6 +40,7 @@ func NewDefaultRegistry() *Registry {
 	registry.Register(&MemoryTool{Store: nil})
 	registry.Register(&MemoryGetTool{Store: nil})
 	registry.Register(&MemoryStoreTool{Store: nil})
+	registry.Register(&MemoryGraphTool{Store: nil})
 
 	return registry
 }
@@ -73,6 +74,7 @@ func NewMemoryRegistry(store *memory.VectorMemoryStore) *Registry {
 	registry.Register(&MemoryTool{Store: store})
 	registry.Register(&MemoryGetTool{Store: store})
 	registry.Register(&MemoryStoreTool{Store: store})
+	registry.Register(&MemoryGraphTool{Store: store})
 
 	return registry
 }

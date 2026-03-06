@@ -20,6 +20,23 @@ export EMBEDDING_MODEL_PATH="/opt/openclaw-go/models/embeddinggemma-300M-Q8_0.gg
 
 ---
 
+## Hybrid Search
+
+OCG supports hybrid search combining FAISS vector similarity with SQLite FTS5 full-text search.
+
+### Configuration
+
+```bash
+export HYBRID_SEARCH_ENABLED=true
+export VECTOR_WEIGHT=0.7
+export TEXT_WEIGHT=0.3
+```
+
+- **Vector Weight**: Importance of semantic similarity (default 0.7)
+- **Text Weight**: Importance of keyword matching (default 0.3)
+
+---
+
 ## Components
 
 ### Embedding Service

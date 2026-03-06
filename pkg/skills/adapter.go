@@ -322,7 +322,6 @@ func BuiltinSkillsDir() string {
 	locations := []string{
 		"./skills",
 		"../skills",
-		"/usr/lib/node_modules/openclaw/skills",
 		filepath.Join(os.Getenv("HOME"), ".openclaw", "workspace", "skills"),
 	}
 

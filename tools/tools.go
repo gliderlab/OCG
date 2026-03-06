@@ -40,7 +40,7 @@ var ToolGroups = map[string][]string{
 	"group:runtime":    {"exec", "process"},
 	"group:fs":         {"read", "write", "edit", "apply_patch"},
 	"group:sessions":   {"sessions_list", "sessions_history", "sessions_send", "sessions_spawn", "session_status"},
-	"group:memory":     {"memory_search", "memory_get"},
+	"group:memory":     {"memory_search", "memory_get", "memory_store", "memory_graph"},
 	"group:web":        {"web_search", "web_fetch"},
 	"group:ui":         {"browser", "canvas"},
 	"group:automation": {"cron", "gateway"},

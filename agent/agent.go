@@ -391,7 +391,6 @@ func findSkillsDir() string {
 		"./skills",
 		"skills",
 		config.DefaultWorkspaceDir() + "/skills",
-		"/usr/lib/node_modules/openclaw/skills",
 	}
 
 	for _, loc := range locations {

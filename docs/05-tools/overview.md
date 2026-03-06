@@ -43,6 +43,8 @@ OCG provides 17+ built-in tools for AI agent operations.
 | `memory_search` | Semantic memory search |
 | `memory_get` | Read memory snippets |
 | `memory_store` | Store memories |
+| `memory_graph` | Knowledge graph management |
+| `task_split` | Split tasks for efficiency |
 
 ### Sessions
 | Tool | Description |

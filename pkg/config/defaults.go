@@ -81,8 +81,8 @@ func DefaultInstallDir() string {
 		// So install dir is parent of binary
 		return filepath.Dir(exe)
 	}
-	// Fallback
-	return "/opt/ocg"
+	// Fallback to relative path
+	return "."
 }
 
 // DefaultWorkspaceDir returns the workspace directory (default: <binary-dir>/workspace)

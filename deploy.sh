@@ -10,7 +10,7 @@ set -euo pipefail
 #   USE_SWAP     - on/off to auto-create swap if none (default on)
 #   SWAP_SIZE    - swap size (default 4G)
 
-OCG_DIR="/opt/openclaw-go"
+OCG_DIR="${OCG_DIR:-/opt/openclaw-go}"
 OCG_REPO="https://github.com/gliderlab/ocg.git"
 OCG_REF="${OCG_REF:-main}"
 LLAMA_REPO="https://github.com/ggml-org/llama.cpp.git"

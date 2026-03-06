@@ -43,6 +43,8 @@ OCG 提供 17+ 个内置工具用于 AI Agent 操作。
 | `memory_search` | 语义记忆搜索 |
 | `memory_get` | 读取记忆片段 |
 | `memory_store` | 存储记忆 |
+| `memory_graph` | 知识图谱管理 |
+| `task_split` | 任务拆分以提升效率 |
 
 ### 会话
 | 工具 | 描述 |

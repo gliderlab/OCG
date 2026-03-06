@@ -11,6 +11,8 @@
 - **OS**: Linux (Ubuntu/Debian recommended), macOS, Windows (WSL2)
 - **Go**: 1.22 or higher
 - **GCC**: Required for SQLite CGO bindings
+- **Node.js**: Recommended for JS-based skills
+- **Python 3**: Recommended for Python-based skills
 - **Memory**: Minimum 512MB RAM (1GB+ recommended)
 - **Storage**: ~500MB for binary + models
 

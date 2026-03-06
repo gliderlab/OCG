@@ -112,6 +112,30 @@ memory_store(content="生产环境配置已更新", tags=["config", "production"
 
 ---
 
+## memory_graph
+
+与知识图谱交互，提取并保存结构化关系。
+
+### 使用
+
+```bash
+memory_graph(action="add_entity", name="OCG", entity_type="项目")
+```
+
+### 参数
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `action` | string | 动作: `add_entity`, `add_relation`, `get_entity`, `search_relations` |
+| `name` | string | 实体名称 (用于实体动作) |
+| `entity_type` | string | 实体类型 (用于 `add_entity`) |
+| `description` | string | 描述 (用于 `add_entity`) |
+| `source` | string | 源实体 (用于 `add_relation`) |
+| `target` | string | 目标实体 (用于 `add_relation`) |
+| `relation` | string | 关系类型 (用于 `add_relation`) |
+
+---
+
 ## 记忆文件
 
 ### 结构

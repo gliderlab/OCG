@@ -20,6 +20,23 @@ export EMBEDDING_MODEL_PATH="/opt/openclaw-go/models/embeddinggemma-300M-Q8_0.gg
 
 ---
 
+## 混合检索 (Hybrid Search)
+
+OCG 支持结合 FAISS 向量相似度与 SQLite FTS5 全文检索的混合检索模式。
+
+### 配置
+
+```bash
+export HYBRID_SEARCH_ENABLED=true
+export VECTOR_WEIGHT=0.7
+export TEXT_WEIGHT=0.3
+```
+
+- **Vector Weight**: 语义相似度的权重（默认 0.7）
+- **Text Weight**: 关键词匹配的权重（默认 0.3）
+
+---
+
 ## 组件
 
 ### Embedding 服务

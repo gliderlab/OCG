@@ -384,3 +384,142 @@ func extractKeywords(prompt string) []string {
 	}
 	return keywords
 }
+
+// ==================== Memory Graph Tool ====================
+
+// MemoryGraphTool manages the knowledge graph
+type MemoryGraphTool struct {
+	Store *memory.VectorMemoryStore
+}
+
+func NewMemoryGraphTool(store *memory.VectorMemoryStore) *MemoryGraphTool {
+	return &MemoryGraphTool{Store: store}
+}
+
+func (t *MemoryGraphTool) Name() string { return "memory_graph" }
+
+func (t *MemoryGraphTool) Description() string {
+	return `Interact with the Knowledge Graph. Use this to explicitly extract and save structured relationships (Entities and Relations) about the user, projects, or important concepts. Action can be 'add_entity', 'add_relation', 'get_entity', or 'search_relations'.`
+}
+
+func (t *MemoryGraphTool) Parameters() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"action": map[string]interface{}{
+				"type": "string",
+				"enum": []string{"add_entity", "add_relation", "get_entity", "search_relations"},
+				"description": "The graph action to perform.",
+			},
+			"name": map[string]interface{}{
+				"type": "string",
+				"description": "Name of the entity (for add_entity, get_entity, search_relations). Convert to lowercase.",
+			},
+			"entity_type": map[string]interface{}{
+				"type": "string",
+				"description": "Type of the entity (e.g., 'person', 'project', 'technology') (for add_entity).",
+			},
+			"description": map[string]interface{}{
+				"type": "string",
+				"description": "Description or attributes of the entity (for add_entity).",
+			},
+			"source": map[string]interface{}{
+				"type": "string",
+				"description": "Source entity name (for add_relation).",
+			},
+			"target": map[string]interface{}{
+				"type": "string",
+				"description": "Target entity name (for add_relation).",
+			},
+			"relation": map[string]interface{}{
+				"type": "string",
+				"description": "Relationship type (e.g., 'works_on', 'likes', 'depends_on') (for add_relation).",
+			},
+			"weight": map[string]interface{}{
+				"type": "number",
+				"description": "Relationship weight (0.0 to 1.0, default 1.0) (for add_relation).",
+			},
+		},
+		"required": []string{"action"},
+	}
+}
+
+func (t *MemoryGraphTool) Execute(args map[string]interface{}) (interface{}, error) {
+	if t.Store == nil || t.Store.Graph == nil {
+		return nil, fmt.Errorf("knowledge graph is disabled or unavailable")
+	}
+
+	action := GetString(args, "action")
+
+	switch action {
+	case "add_entity":
+		name := GetString(args, "name")
+		entityType := GetString(args, "entity_type")
+		desc := GetString(args, "description")
+		if name == "" {
+			return nil, fmt.Errorf("missing required parameter: name")
+		}
+		if entityType == "" {
+			entityType = "concept"
+		}
+		err := t.Store.Graph.AddEntity(name, entityType, desc)
+		if err != nil {
+			return nil, err
+		}
+		return fmt.Sprintf("Successfully added/updated entity: %s", name), nil
+
+	case "add_relation":
+		source := GetString(args, "source")
+		target := GetString(args, "target")
+		relation := GetString(args, "relation")
+		weight := GetFloat64(args, "weight")
+		if weight == 0 {
+			weight = 1.0
+		}
+		if source == "" || target == "" || relation == "" {
+			return nil, fmt.Errorf("missing required parameters: source, target, relation")
+		}
+		err := t.Store.Graph.AddRelation(source, target, relation, weight)
+		if err != nil {
+			return nil, err
+		}
+		return fmt.Sprintf("Successfully added relation: %s -[%s]-> %s", source, relation, target), nil
+
+	case "get_entity":
+		name := GetString(args, "name")
+		if name == "" {
+			return nil, fmt.Errorf("missing required parameter: name")
+		}
+		e, err := t.Store.Graph.GetEntity(name)
+		if err != nil {
+			return nil, err
+		}
+		if e == nil {
+			return fmt.Sprintf("Entity '%s' not found.", name), nil
+		}
+		return fmt.Sprintf("Entity: %s\nType: %s\nDescription: %s", e.Name, e.Type, e.Description), nil
+
+	case "search_relations":
+		name := GetString(args, "name")
+		if name == "" {
+			return nil, fmt.Errorf("missing required parameter: name")
+		}
+		rels, err := t.Store.Graph.SearchRelations(name)
+		if err != nil {
+			return nil, err
+		}
+		if len(rels) == 0 {
+			return fmt.Sprintf("No relations found for '%s'.", name), nil
+		}
+		
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Relations for '%s':\n", name))
+		for _, r := range rels {
+			sb.WriteString(fmt.Sprintf("- %s -[%s]-> %s (weight: %.2f)\n", r.Source, r.Relation, r.Target, r.Weight))
+		}
+		return sb.String(), nil
+
+	default:
+		return nil, fmt.Errorf("unknown action: %s", action)
+	}
+}
