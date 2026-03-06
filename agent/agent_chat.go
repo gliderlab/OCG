@@ -403,6 +403,10 @@ func (a *Agent) chatInternal(sessionKey string, messages []Message) string {
 		}
 	}
 
+	// Inject core System Prompt
+	sysPrompt := Message{Role: "system", Content: a.GetSystemPrompt()}
+	messages = append([]Message{sysPrompt}, messages...)
+
 	// overflow handling
 	if a.store != nil {
 		messages = a.handleContextOverflow(sessionKey, messages)
