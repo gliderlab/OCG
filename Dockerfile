@@ -10,9 +10,9 @@ RUN apk add --no-cache \
     linux-headers
 
 WORKDIR /src
-# Copy llama.cpp source code to build the server
-# (Assuming llama.cpp is present in the docker context via git submodule)
-COPY llama.cpp ./llama.cpp
+# Clone llama.cpp source code to build the server
+RUN git clone https://github.com/ggml-org/llama.cpp.git && \
+    cd llama.cpp
 
 WORKDIR /src/llama.cpp/build
 RUN cmake .. \
