@@ -251,6 +251,11 @@ func formatUnixMilli(ms int64) string {
 	return time.UnixMilli(ms).Local().Format("2006-01-02 15:04:05")
 }
 
+// FormatUnixMilliForTest exports formatUnixMilli for testing
+func FormatUnixMilliForTest(ms int64) string {
+	return formatUnixMilli(ms)
+}
+
 func (a *Agent) runArchiveDebug(sessionKey string) string {
 	if a.store == nil {
 		return "Storage not available"
@@ -391,4 +396,35 @@ func (a *Agent) callLLMForSummary(prompt string) (string, error) {
 	}
 
 	return response.Choices[0].Message.Content, nil
+}
+
+// === Test Helper Functions (exported for testing) ===
+
+// RunTestStoreUserTask exposes storeUserTask for testing
+func (a *Agent) RunTestStoreUserTask(session, instructions string, subtasks []string) string {
+	result, err := a.storeUserTask(session, instructions, subtasks)
+	if err != nil {
+		return "Error: " + err.Error()
+	}
+	return result
+}
+
+// RunTestTaskList exposes runTaskList for testing
+func (a *Agent) RunTestTaskList(session string, limit int) string {
+	return a.runTaskList(session, limit)
+}
+
+// RunTestCompact exposes runCompact for testing
+func (a *Agent) RunTestCompact(instructions string) string {
+	return a.runCompact(instructions)
+}
+
+// RunTestNewSession exposes runNewSession for testing
+func (a *Agent) RunTestNewSession() string {
+	return a.runNewSession()
+}
+
+// RunTestResetSession exposes runResetSession for testing
+func (a *Agent) RunTestResetSession() string {
+	return a.runResetSession()
 }
