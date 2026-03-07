@@ -1168,20 +1168,17 @@ func (s *VectorMemoryStore) Delete(id string) (bool, error) {
 
 func (s *VectorMemoryStore) rebuildHNSW() {
 	s.hnswMu.Lock()
-	defer s.hnswMu.Unlock()
-	
-	if s.hnsw == nil {
+	old := s.hnsw
+	if old == nil {
+		s.hnswMu.Unlock()
 		return
 	}
+	cfg := old.Config()
+	s.hnswMu.Unlock()
 
-	cfg := s.hnsw.Config()
 	idx, err := NewHNSWIndex(cfg)
 	if err != nil {
 		log.Printf("rebuild HNSW failed: %v", err)
-		s.hnswMu.Lock()
-		s.hnsw = nil
-		s.hnswIDs = nil
-		s.hnswMu.Unlock()
 		return
 	}
 
@@ -1201,7 +1198,6 @@ func (s *VectorMemoryStore) rebuildHNSW() {
 	s.hnswMu.Unlock()
 
 	old.Close()
-	s.saveHNSW()
 	log.Printf("[OK] HNSW rebuild completed (atomic), %d vectors loaded", len(newIDs))
 }
 
