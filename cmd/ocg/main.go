@@ -91,6 +91,7 @@ func startCmd(args []string) {
 	fs := flag.NewFlagSet("start", flag.ExitOnError)
 	configPath := fs.String("config", "", "Path to env.config")
 	pidDir := fs.String("pid-dir", defaultPidDir, "Directory for pid files")
+	foreground := fs.Bool("foreground", false, "Keep running in foreground")
 	fs.Parse(args)
 
 	cfgPath, cfgDir := resolveConfigPath(*configPath)
@@ -142,6 +143,12 @@ func startCmd(args []string) {
 	}
 
 	fmt.Println("[OK] OCG services started")
+
+	// Foreground mode: wait forever if requested or in Docker
+	if *foreground {
+		fmt.Println("[INFO] Running in foreground mode, press Ctrl+C to stop...")
+		select {}
+	}
 }
 
 func stopCmd(args []string) {
@@ -635,7 +642,7 @@ func printUsage() {
 	fmt.Println("Usage: ocg <command> [options]")
 	fmt.Println("")
 	fmt.Println("Commands:")
-	fmt.Println("  start       Start embedding, agent, gateway then exit")
+	fmt.Println("  start       Start embedding, agent, gateway (use --foreground for Docker)")
 	fmt.Println("  stop        Stop all OCG processes (escalating signals)")
 	fmt.Println("  status      Show running state and health")
 	fmt.Println("  restart     Stop then start")

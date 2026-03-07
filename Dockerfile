@@ -75,5 +75,5 @@ VOLUME ["/app/data"]
 
 EXPOSE 8080
 
-# Start the OCG process manager
-ENTRYPOINT ["/app/ocg", "start"]
+# Start the OCG process manager in foreground mode to keep container alive
+ENTRYPOINT ["/app/ocg", "start", "--foreground"]
