@@ -2,8 +2,7 @@ version: '3.8'
 
 services:
   ocg:
-    build: .
-    image: ocg-ai:latest
+    image: gliderlab/ocg:latest
     container_name: ocg-agent
     restart: unless-stopped
     ports:
