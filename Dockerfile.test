@@ -1,4 +1,4 @@
-# Minimal Dockerfile for testing Docker Hub authentication
-FROM alpine:latest
-RUN echo "Testing Docker Hub authentication" > /test.txt
-ENTRYPOINT ["cat", "/test.txt"]
+# Absolute minimal image for testing Docker Hub push permissions
+FROM scratch
+COPY --from=alpine:latest /etc/passwd /etc/passwd
+ENTRYPOINT ["/bin/true"]
