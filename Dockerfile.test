@@ -1,4 +1,3 @@
-# Absolute minimal image for testing Docker Hub push permissions
+# Extreme minimal image for auth test
 FROM scratch
-COPY --from=alpine:latest /etc/passwd /etc/passwd
-ENTRYPOINT ["/bin/true"]
+LABEL description="auth-test-only"
