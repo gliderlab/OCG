@@ -15,7 +15,30 @@
 ```bash
 export OCG_VECTOR_PROVIDER="hnsw"
 export OCG_VECTOR_INDEX="/opt/openclaw-go/vector.index"
-export EMBEDDING_MODEL_PATH="/opt/openclaw-go/models/embeddinggemma-300M-Q8_0.gguf"
+export EMBEDDING_MODEL_PATH="/app/models/nomic-embed-text-v1.5.f16.gguf"
+```
+
+### 推荐模型 (Embedding Models)
+
+OCG Embedding 服务需要 GGUF 格式的向量模型。以下是推荐的轻量级模型：
+
+1. **Nomic Embed Text v1.5 (推荐)**
+   - **特点**: 对中文支持极佳，长文本处理能力强（8k context），体积适中。
+   - **下载地址**: [Hugging Face - nomic-ai/nomic-embed-text-v1.5-GGUF](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf?download=true)
+   - **文件**: `nomic-embed-text-v1.5.f16.gguf` (约 260MB)
+
+2. **Gemma 300M Embedding**
+   - **特点**: 极致轻量，适合资源受限环境。
+   - **下载地址**: [Hugging Face - mradermaker/embedding-gemma-300M-Q8_0](https://huggingface.co/mradermaker/embedding-gemma-300M-Q8_0/resolve/main/embeddinggemma-300M-Q8_0.gguf?download=true)
+   - **文件**: `embeddinggemma-300M-Q8_0.gguf` (约 300MB)
+
+### 安装模型
+
+在容器环境或本地部署时，请确保将模型放入 `models/` 目录：
+
+```bash
+mkdir -p models
+wget -O models/nomic-embed-text-v1.5.f16.gguf https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf?download=true
 ```
 
 ---

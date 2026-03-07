@@ -29,7 +29,6 @@ import (
 	"github.com/gliderlab/cogate/pkg/kv"
 	"github.com/gliderlab/cogate/pkg/llm"
 	"github.com/gliderlab/cogate/pkg/skills"
-	"github.com/gliderlab/cogate/rpcproto"
 	"github.com/gliderlab/cogate/storage"
 	"github.com/gliderlab/cogate/tools"
 )
@@ -50,7 +49,7 @@ type Agent struct {
 	store       *storage.Storage
 	memoryStore *memory.VectorMemoryStore
 	registry    *tools.Registry
-	systemTools []rpcproto.Tool
+	systemTools []llm.Tool
 	pulse       *PulseHandler
 	compactMu   sync.Mutex // Mutex for compaction (replaces channel)
 	kv          *kv.KV     // Fast KV cache (BadgerDB)
@@ -155,7 +154,7 @@ func (a *Agent) refreshToolSpecs() {
 	}
 	specs := a.registry.GetToolSpecs()
 
-	newTools := make([]rpcproto.Tool, 0, len(specs))
+	newTools := make([]llm.Tool, 0, len(specs))
 	for _, s := range specs {
 		functionObj, ok := s["function"].(map[string]interface{})
 		if !ok {
@@ -166,13 +165,12 @@ func (a *Agent) refreshToolSpecs() {
 		name, _ := functionObj["name"].(string)
 		desc, _ := functionObj["description"].(string)
 		params, _ := functionObj["parameters"].(map[string]interface{})
-		paramsJSON, _ := json.Marshal(params)
-		newTools = append(newTools, rpcproto.Tool{
+		newTools = append(newTools, llm.Tool{
 			Type: "function",
-			Function: &rpcproto.ToolFunction{
+			Function: &llm.ToolFunction{
 				Name:        name,
 				Description: desc,
-				Parameters:  string(paramsJSON),
+				Parameters:  params,
 			},
 		})
 	}
@@ -184,15 +182,20 @@ func (a *Agent) refreshToolSpecs() {
 }
 
 // toolsEqual compares two tool slices for equality
-func toolsEqual(a, b []rpcproto.Tool) bool {
+func toolsEqual(a, b []llm.Tool) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
 		if a[i].Function.Name != b[i].Function.Name ||
-			a[i].Function.Description != b[i].Function.Description ||
-			a[i].Function.Parameters != b[i].Function.Parameters {
+			a[i].Function.Description != b[i].Function.Description {
 			return false
+		}
+		if aj, _ := json.Marshal(a[i].Function.Parameters); string(aj) != "" {
+			bj, _ := json.Marshal(b[i].Function.Parameters)
+			if string(aj) != string(bj) {
+				return false
+			}
 		}
 	}
 	return true
@@ -203,7 +206,7 @@ type ChatRequest struct {
 	Messages    []Message       `json:"messages"`
 	Temperature float64         `json:"temperature,omitempty"`
 	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Tools       []rpcproto.Tool `json:"tools,omitempty"`
+	Tools       []llm.Tool      `json:"tools,omitempty"`
 	Stream      bool            `json:"stream,omitempty"`
 }
 

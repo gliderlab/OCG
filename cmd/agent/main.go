@@ -130,7 +130,7 @@ func main() {
 		defer memoryStore.Close()
 	}
 
-	// 3. Load config (skip file if DB already has config)
+	// 3. Load config
 	var cfg pkgconfig.AgentConfig
 	configExists, _ := store.ConfigExists("llm")
 
@@ -140,58 +140,55 @@ func main() {
 		log.Printf("[Config] Force loading from env.config (OCG_FORCE_ENV_CONFIG=true)")
 	}
 
-	if !configExists {
-		// 3.1 env.config
-		if v, ok := envConfig["OCG_API_KEY"]; ok && v != "" {
-			cfg.APIKey = v
-		}
-		if v, ok := envConfig["OCG_BASE_URL"]; ok && v != "" {
-			cfg.BaseURL = v
-		}
-		if v, ok := envConfig["OCG_MODEL"]; ok && v != "" {
-			cfg.Model = v
-		}
+	if configExists {
+		// 3.1 Load from DB
+		dbCfg, _ := store.GetConfigSection("llm")
+		if v, ok := dbCfg["apiKey"]; ok { cfg.APIKey = v }
+		if v, ok := dbCfg["baseUrl"]; ok { cfg.BaseURL = v }
+		if v, ok := dbCfg["model"]; ok { cfg.Model = v }
+		log.Printf("Config loaded from database")
+	} else {
+		// 3.2 env.config
+		if v, ok := envConfig["OCG_API_KEY"]; ok && v != "" { cfg.APIKey = v }
+		if v, ok := envConfig["OCG_BASE_URL"]; ok && v != "" { cfg.BaseURL = v }
+		if v, ok := envConfig["OCG_MODEL"]; ok && v != "" { cfg.Model = v }
+	}
 
-		// 3.2 environment overrides
-		if v := os.Getenv("OCG_API_KEY"); v != "" {
-			cfg.APIKey = v
-		}
-		if v := os.Getenv("OCG_BASE_URL"); v != "" {
-			cfg.BaseURL = v
-		}
-		if v := os.Getenv("OCG_MODEL"); v != "" {
-			cfg.Model = v
-		}
+	// 3.3 environment overrides (OCG specific then Generic) - Always check overrides
+	if v := os.Getenv("OCG_API_KEY"); v != "" {
+		cfg.APIKey = v
+	} else if v := os.Getenv("API_KEY"); v != "" {
+		cfg.APIKey = v
+	}
 
-		// 3.3 optional config.json
-		cfgFile := "config.json"
-		if _, err := os.Stat(cfgFile); err == nil {
-			data, err := os.ReadFile(cfgFile)
-			if err != nil {
-				log.Printf("Failed to read config.json: %v", err)
+	if v := os.Getenv("OCG_BASE_URL"); v != "" {
+		cfg.BaseURL = v
+	} else if v := os.Getenv("BASE_URL"); v != "" {
+		cfg.BaseURL = v
+	}
+
+	if v := os.Getenv("OCG_MODEL"); v != "" {
+		cfg.Model = v
+	} else if v := os.Getenv("MODEL"); v != "" {
+		cfg.Model = v
+	}
+
+	// 3.4 optional config.json
+	cfgFile := "config.json"
+	if _, err := os.Stat(cfgFile); err == nil {
+		data, err := os.ReadFile(cfgFile)
+		if err == nil {
+			var c Config
+			if err := json.Unmarshal(data, &c); err != nil {
+				log.Printf("Failed to parse config.json: %v", err)
 			} else {
-				var c Config
-				if err := json.Unmarshal(data, &c); err != nil {
-					log.Printf("Failed to parse config.json: %v", err)
-				} else {
-					if c.APIKey != "" {
-						cfg.APIKey = c.APIKey
-					}
-					if c.BaseURL != "" {
-						cfg.BaseURL = c.BaseURL
-					}
-					if c.Model != "" {
-						cfg.Model = c.Model
-					}
-					if c.Port > 0 {
-						os.Setenv("OCG_PORT", fmt.Sprintf("%d", c.Port))
-					}
-					log.Printf("Loaded config from config.json")
-				}
+				if c.APIKey != "" { cfg.APIKey = c.APIKey }
+				if c.BaseURL != "" { cfg.BaseURL = c.BaseURL }
+				if c.Model != "" { cfg.Model = c.Model }
+				if c.Port > 0 { os.Setenv("OCG_PORT", fmt.Sprintf("%d", c.Port)) }
+				log.Printf("Loaded config from config.json")
 			}
 		}
-	} else {
-		log.Printf("Config found in database, skipping file load")
 	}
 
 	autoRecall := strings.ToLower(os.Getenv("OCG_AUTO_RECALL"))
