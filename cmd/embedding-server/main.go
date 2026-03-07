@@ -159,10 +159,30 @@ func main() {
 		llamaAddr = fmt.Sprintf("%s:%d", config.LLMHost, config.LLMPort)
 	}
 
-	// Optional custom llama-server path
-	config.LlamaBin = existingConfig["LLAMA_SERVER_BIN"]
-	if v := os.Getenv("LLAMA_SERVER_BIN"); v != "" {
-		config.LlamaBin = v
+	exePath, _ := os.Executable()
+	baseDir := filepath.Dir(exePath)
+
+	// Determine llama-server binary path
+	// 1. First look in the current directory (where the executable is)
+	localLlama := filepath.Join(baseDir, "llama-server")
+	if runtime.GOOS == "windows" {
+		localLlama += ".exe"
+	}
+
+	if _, err := os.Stat(localLlama); err == nil {
+		config.LlamaBin = localLlama
+		// Ensure it's executable
+		if runtime.GOOS != "windows" {
+			_ = os.Chmod(localLlama, 0755)
+		}
+	} else {
+		// 2. Then read config file
+		config.LlamaBin = existingConfig["LLAMA_SERVER_BIN"]
+
+		// 3. Then read environment variable
+		if v := os.Getenv("LLAMA_SERVER_BIN"); v != "" {
+			config.LlamaBin = v
+		}
 	}
 
 	// Model path
@@ -199,19 +219,6 @@ func main() {
 	if _, err := os.Stat(config.ModelPath); os.IsNotExist(err) {
 		log.Printf("[ERROR] model file not found: %s", config.ModelPath)
 		os.Exit(1)
-	}
-
-	// Default llama-server binary path: prefer project root bin/llama-server; fallback to submodule build
-	exePath, _ := os.Executable()
-	baseDir := filepath.Dir(exePath)
-	if config.LlamaBin == "" {
-		primary := filepath.Join(baseDir, "llama-server")
-		fallback := filepath.Join(filepath.Dir(baseDir), "llama.cpp", "build", "bin", "llama-server")
-		if _, err := os.Stat(primary); err == nil {
-			config.LlamaBin = primary
-		} else {
-			config.LlamaBin = fallback
-		}
 	}
 
 	// Write env.config
@@ -276,21 +283,12 @@ func main() {
 // Start llama.cpp server
 func startLlamaServer() error {
 	if runtime.GOOS != "windows" {
-		_ = exec.Command("pkill", "-f", "llama.cpp/build/bin/llama-server").Run()
+		_ = exec.Command("pkill", "-f", "llama-server").Run()
 	}
 
-	// Prefer configured binary path
 	llamaPath := config.LlamaBin
 	if _, err := os.Stat(llamaPath); os.IsNotExist(err) {
-		// Try building in submodule as fallback
-		exePath, _ := os.Executable()
-		baseDir := filepath.Dir(exePath)
-		llamaDir := filepath.Join(filepath.Dir(baseDir), "llama.cpp")
-		llamaPath = filepath.Join(llamaDir, "build", "bin", "llama-server")
-		log.Printf("llama-server not found at %s, building from source in %s...", config.LlamaBin, llamaDir)
-		if err := buildLlamaServer(llamaDir); err != nil {
-			return fmt.Errorf("failed to build llama-server: %v", err)
-		}
+		return fmt.Errorf("llama-server not found at %s", llamaPath)
 	}
 
 	args := []string{
@@ -322,22 +320,6 @@ func startLlamaServer() error {
 
 	log.Printf("Started llama server: %s", strings.Join(args, " "))
 	return nil
-}
-
-// Build llama-server
-func buildLlamaServer(dir string) error {
-	buildDir := filepath.Join(dir, "build")
-	os.MkdirAll(buildDir, 0755)
-
-	if runtime.GOOS == "windows" {
-		return fmt.Errorf("llama-server build not supported on windows; prebuild required")
-	}
-	// Use llama.cpp Makefile
-	makeCmd := exec.Command("make", "LLAMA_BUILD_EMBEDDING=ON", "-j", "4")
-	makeCmd.Dir = dir
-	makeCmd.Stdout = os.Stdout
-	makeCmd.Stderr = os.Stderr
-	return makeCmd.Run()
 }
 
 // Stop llama server
