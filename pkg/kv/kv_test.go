@@ -75,6 +75,9 @@ func TestKVStructure(t *testing.T) {
 
 	// Test closedMu
 	kv.closedMu.Lock()
+	if kv.db == nil {
+		t.Error("expected db to be non-nil")
+	}
 	kv.closedMu.Unlock()
 	// If we got here without panic, the mutex works
 }

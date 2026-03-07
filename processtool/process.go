@@ -278,7 +278,11 @@ func restartProcess(proc *ProcessInfo) (map[string]interface{}, error) {
 
 	// Wait for process in background
 	go func() {
-		cmd.Wait()
+		_ = cmd.Wait()
+		procMutex.Lock()
+		defer procMutex.Unlock()
+		// Mark as finished or update state if needed
+		proc.LastRestartTime = time.Now()
 	}()
 
 	return map[string]interface{}{

@@ -1167,14 +1167,14 @@ func (s *VectorMemoryStore) Delete(id string) (bool, error) {
 }
 
 func (s *VectorMemoryStore) rebuildHNSW() {
-	s.hnswMu.RLock()
-	old := s.hnsw
-	s.hnswMu.RUnlock()
-	if old == nil {
+	s.hnswMu.Lock()
+	defer s.hnswMu.Unlock()
+	
+	if s.hnsw == nil {
 		return
 	}
 
-	cfg := old.Config()
+	cfg := s.hnsw.Config()
 	idx, err := NewHNSWIndex(cfg)
 	if err != nil {
 		log.Printf("rebuild HNSW failed: %v", err)
