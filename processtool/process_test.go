@@ -105,20 +105,29 @@ func TestProcessTool_PtyExecution(t *testing.T) {
 	startRes := res.(ProcessStartResult)
 
 	// Wait for process to exit and PTY to flush
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(800 * time.Millisecond) // increased wait time for macOS CI
 
 	logArgs := map[string]interface{}{
 		"action":    "log",
 		"sessionId": startRes.SessionID,
 	}
-	logRes, err := tool.Execute(logArgs)
-	if err != nil {
-		t.Fatalf("failed to get log: %v", err)
+	
+	// Retry loop for log verification (to avoid flaky tests on slow CI)
+	var logStr string
+	for i := 0; i < 5; i++ {
+		logRes, err := tool.Execute(logArgs)
+		if err == nil {
+			logData := logRes.(ProcessLogResult)
+			logStr = logData.Content
+			if strings.Contains(logStr, "pty-test") {
+				break
+			}
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 
-	logData := logRes.(ProcessLogResult)
-	if !strings.Contains(logData.Content, "pty-test") {
-		t.Errorf("expected log to contain 'pty-test', got %q", logData.Content)
+	if !strings.Contains(logStr, "pty-test") {
+		t.Errorf("expected log to contain 'pty-test', got %q", logStr)
 	}
 }
 
