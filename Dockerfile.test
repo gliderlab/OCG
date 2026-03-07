@@ -1,3 +1,0 @@
-# Extreme minimal image for auth test
-FROM scratch
-LABEL description="auth-test-only"
