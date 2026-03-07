@@ -1,0 +1,4 @@
+# Minimal Dockerfile for testing Docker Hub authentication
+FROM alpine:latest
+RUN echo "Testing Docker Hub authentication" > /test.txt
+ENTRYPOINT ["cat", "/test.txt"]
