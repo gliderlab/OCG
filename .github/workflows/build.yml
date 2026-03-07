@@ -44,5 +44,19 @@ jobs:
           go build -ldflags="-s -w -buildid=" -o bin/ocg-gateway ./cmd/gateway/
           go build -ldflags="-s -w -buildid=" -tags "sqlite_fts5" -o bin/ocg-agent ./cmd/agent/
           go build -ldflags="-s -w -buildid=" -o bin/ocg-embedding ./cmd/embedding-server/
+      - name: Test with Coverage Gate
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          go test ./... -coverprofile=coverage.out
+          COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          echo "Current Test Coverage: ${COVERAGE}%"
+          MIN_COVERAGE=7.0
+          FAIL=$(awk -v cov="$COVERAGE" -v min="$MIN_COVERAGE" 'BEGIN {print (cov < min) ? "1" : "0"}')
+          if [ "$FAIL" = "1" ]; then
+            echo "::error::Test coverage ($COVERAGE%) is below the minimum required ($MIN_COVERAGE%)"
+            exit 1
+          fi
+          echo "Coverage check passed!"
       - name: Test
+        if: matrix.os != 'ubuntu-latest'
         run: go test ./...
