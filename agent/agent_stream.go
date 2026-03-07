@@ -25,6 +25,29 @@ func (a *Agent) ChatStreamWithSession(sessionKey string, messages []Message, cal
 }
 
 func (a *Agent) chatStreamInternal(sessionKey string, messages []Message, callback func(string)) {
+	a.mu.RLock()
+	apiKey := a.cfg.APIKey
+	baseURL := a.cfg.BaseURL
+	model := a.cfg.Model
+	temperature := a.cfg.Temperature
+	maxTokens := a.cfg.MaxTokens
+
+	// Apply configuration groups if provider is set
+	if a.cfg.Provider != "" && a.cfg.Groups != nil {
+		if group, ok := a.cfg.Groups[a.cfg.Provider]; ok {
+			if group.APIKey != "" {
+				apiKey = group.APIKey
+			}
+			if group.BaseURL != "" {
+				baseURL = group.BaseURL
+			}
+			if group.Model != "" {
+				model = group.Model
+			}
+		}
+	}
+	a.mu.RUnlock()
+
 	lastMsg := ""
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role == "user" {
@@ -55,7 +78,7 @@ func (a *Agent) chatStreamInternal(sessionKey string, messages []Message, callba
 		return
 	}
 
-	if a.cfg.APIKey == "" {
+	if apiKey == "" {
 		response := a.simpleResponse(messages)
 		callback(response)
 		if a.store != nil && lastMsg != "" {
@@ -78,10 +101,10 @@ func (a *Agent) chatStreamInternal(sessionKey string, messages []Message, callba
 
 	// Use streaming HTTP request
 	reqBody := ChatRequest{
-		Model:       a.cfg.Model,
+		Model:       model,
 		Messages:    messages,
-		Temperature: a.cfg.Temperature,
-		MaxTokens:   a.cfg.MaxTokens,
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
 		Stream:      true,
 	}
 	if len(a.systemTools) == 0 {
@@ -90,7 +113,7 @@ func (a *Agent) chatStreamInternal(sessionKey string, messages []Message, callba
 	reqBody.Tools = a.systemTools
 
 	body, _ := json.Marshal(reqBody)
-	url := a.cfg.BaseURL + "/chat/completions"
+	url := baseURL + "/chat/completions"
 
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
@@ -98,7 +121,7 @@ func (a *Agent) chatStreamInternal(sessionKey string, messages []Message, callba
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+a.cfg.APIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := a.client.Do(req)

@@ -18,11 +18,34 @@ func (a *Agent) callAPI(messages []Message) string {
 }
 
 func (a *Agent) callAPIWithDepth(messages []Message, depth int) string {
+	a.mu.RLock()
+	apiKey := a.cfg.APIKey
+	baseURL := a.cfg.BaseURL
+	model := a.cfg.Model
+	temperature := a.cfg.Temperature
+	maxTokens := a.cfg.MaxTokens
+
+	// Apply configuration groups if provider is set
+	if a.cfg.Provider != "" && a.cfg.Groups != nil {
+		if group, ok := a.cfg.Groups[a.cfg.Provider]; ok {
+			if group.APIKey != "" {
+				apiKey = group.APIKey
+			}
+			if group.BaseURL != "" {
+				baseURL = group.BaseURL
+			}
+			if group.Model != "" {
+				model = group.Model
+			}
+		}
+	}
+	a.mu.RUnlock()
+
 	reqBody := ChatRequest{
-		Model:       a.cfg.Model,
+		Model:       model,
 		Messages:    messages,
-		Temperature: a.cfg.Temperature,
-		MaxTokens:   a.cfg.MaxTokens,
+		Temperature: temperature,
+		MaxTokens:   maxTokens,
 	}
 	if len(a.systemTools) == 0 {
 		a.refreshToolSpecs()
@@ -31,7 +54,7 @@ func (a *Agent) callAPIWithDepth(messages []Message, depth int) string {
 	reqBody.Tools = a.systemTools
 
 	body, _ := json.Marshal(reqBody)
-	url := a.cfg.BaseURL + "/chat/completions"
+	url := baseURL + "/chat/completions"
 
 	// For tool result processing (depth > 0), use shorter timeout
 	ctx := context.Background()
@@ -47,7 +70,7 @@ func (a *Agent) callAPIWithDepth(messages []Message, depth int) string {
 		return fmt.Sprintf("request build error: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+a.cfg.APIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := a.client.Do(req)
 	if err != nil {

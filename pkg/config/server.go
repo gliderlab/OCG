@@ -156,8 +156,19 @@ type ContextPruningConfig struct {
 	}
 }
 
+// ConfigGroup holds a named configuration for an LLM provider
+type ConfigGroup struct {
+	Type          string `json:"type,omitempty"`
+	APIKey        string `json:"apiKey,omitempty"`
+	BaseURL       string `json:"baseUrl,omitempty"`
+	Model         string `json:"model,omitempty"`
+	ContextWindow int    `json:"contextWindow,omitempty"`
+}
+
 // AgentConfig holds all configurable Agent parameters
 type AgentConfig struct {
+	Provider         string                 `json:"provider,omitempty"` // Default provider name
+	Groups           map[string]ConfigGroup `json:"groups,omitempty"`   // Configuration groups (provider settings)
 	Model            string        // LLM model name
 	APIKey           string        // API key for LLM provider
 	BaseURL          string        // Base URL for LLM API
