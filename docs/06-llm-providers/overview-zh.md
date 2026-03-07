@@ -8,16 +8,17 @@ OCG 支持多个 LLM 提供商。
 
 | 提供商 | 环境变量 | 默认模型 | 状态 |
 |--------|----------|----------|------|
+| 通用 (Generic) | `API_KEY`, `BASE_URL`, `MODEL` | - | ✅ |
 | OpenAI | `OPENAI_API_KEY` | gpt-4o | ✅ |
-| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4 | ✅ |
-| Google Gemini | `GOOGLE_API_KEY` | gemini-2.5-flash | ✅ |
-| MiniMax | `MINIMAX_API_KEY` | MiniMax-M2 | ✅ |
-| Ollama | - | llama3.1 | ✅ |
-| OpenRouter | `OPENROUTER_API_KEY` | claude-3.5-sonnet | ✅ |
+| Anthropic | `ANTHROPIC_API_KEY` | claude-3-5-sonnet | ✅ |
+| Google Gemini | `GOOGLE_API_KEY`, `GEMINI_API_KEY` | gemini-2.0-flash | ✅ |
+| MiniMax | `MINIMAX_API_KEY` | MiniMax-M2.1 | ✅ |
+| Ollama | `OLLAMA_BASE_URL` | llama3 | ✅ |
+| OpenRouter | `OPENROUTER_API_KEY` | anthropic/claude-3.5-sonnet | ✅ |
 | Moonshot AI | `MOONSHOT_API_KEY` | moonshot-v1-8k | ✅ |
 | 智谱 GLM | `ZHIPU_API_KEY` | glm-4 | ✅ |
 | 百度千帆 | `QIANFAN_ACCESS_KEY` | ernie-speed-8k | ✅ |
-| Vercel AI | `VERCEL_API_KEY` | gpt-4o | ✅ |
+| Vercel AI | `VERCEL_API_TOKEN` | gpt-4o | ✅ |
 | Z.AI | `ZAI_API_KEY` | default | ⚠️ |
 | Custom | `CUSTOM_API_KEY` | - | ✅ |
 
@@ -25,17 +26,28 @@ OCG 支持多个 LLM 提供商。
 
 ## 选择提供商
 
-### 通过环境变量
+### 通过通用环境变量
+
+OCG 支持可在所有提供商之间通用的环境变量。这对于统一配置（例如使用代理或 OneAPI 等聚合 API 时）非常有用。
 
 ```bash
-# 使用 OpenAI
+# 通用配置 (适用于任何提供商)
+export API_KEY="sk-..."
+export BASE_URL="https://api.example.com/v1"
+export MODEL="gpt-4o"
+```
+
+### 通过厂商专用环境变量
+
+厂商专用变量的优先级高于通用变量。
+
+```bash
+# 特别指定 OpenAI
 export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://api.openai.com/v1"
 
-# 使用 Anthropic
+# 特别指定 Anthropic
 export ANTHROPIC_API_KEY="..."
-
-# 使用 Ollama (本地，无需 key)
-export OLLAMA_MODEL="llama3.1"
 ```
 
 ### 通过配置文件

@@ -8,16 +8,17 @@ OCG supports multiple LLM providers.
 
 | Provider | Environment Variable | Default Model | Status |
 |----------|---------------------|---------------|--------|
+| Generic | `API_KEY`, `BASE_URL`, `MODEL` | - | ✅ |
 | OpenAI | `OPENAI_API_KEY` | gpt-4o | ✅ |
-| Anthropic | `ANTHROPIC_API_KEY` | claude-sonnet-4 | ✅ |
-| Google Gemini | `GOOGLE_API_KEY` | gemini-2.5-flash | ✅ |
-| MiniMax | `MINIMAX_API_KEY` | MiniMax-M2 | ✅ |
-| Ollama | - | llama3.1 | ✅ |
-| OpenRouter | `OPENROUTER_API_KEY` | claude-3.5-sonnet | ✅ |
+| Anthropic | `ANTHROPIC_API_KEY` | claude-3-5-sonnet | ✅ |
+| Google Gemini | `GOOGLE_API_KEY`, `GEMINI_API_KEY` | gemini-2.0-flash | ✅ |
+| MiniMax | `MINIMAX_API_KEY` | MiniMax-M2.1 | ✅ |
+| Ollama | `OLLAMA_BASE_URL` | llama3 | ✅ |
+| OpenRouter | `OPENROUTER_API_KEY` | anthropic/claude-3.5-sonnet | ✅ |
 | Moonshot AI | `MOONSHOT_API_KEY` | moonshot-v1-8k | ✅ |
 | Zhipu GLM | `ZHIPU_API_KEY` | glm-4 | ✅ |
 | Baidu Qianfan | `QIANFAN_ACCESS_KEY` | ernie-speed-8k | ✅ |
-| Vercel AI | `VERCEL_API_KEY` | gpt-4o | ✅ |
+| Vercel AI | `VERCEL_API_TOKEN` | gpt-4o | ✅ |
 | Z.AI | `ZAI_API_KEY` | default | ⚠️ |
 | Custom | `CUSTOM_API_KEY` | - | ✅ |
 
@@ -25,17 +26,28 @@ OCG supports multiple LLM providers.
 
 ## Provider Selection
 
-### Via Environment Variable
+### Via Generic Environment Variables
+
+OCG supports generic environment variables that work across all providers. This is useful for one-stop configuration (e.g., when using a proxy or a unified API aggregator like OneAPI).
 
 ```bash
-# Use OpenAI
+# Generic configuration (works for any provider)
+export API_KEY="sk-..."
+export BASE_URL="https://api.example.com/v1"
+export MODEL="gpt-4o"
+```
+
+### Via Vendor-Specific Environment Variables
+
+Vendor-specific variables take precedence over generic ones.
+
+```bash
+# Use OpenAI specifically
 export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://api.openai.com/v1"
 
-# Use Anthropic
+# Use Anthropic specifically
 export ANTHROPIC_API_KEY="..."
-
-# Use Ollama (local, no key)
-export OLLAMA_MODEL="llama3.1"
 ```
 
 ### Via Configuration File
