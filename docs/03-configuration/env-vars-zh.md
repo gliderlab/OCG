@@ -13,7 +13,19 @@ OCG 环境变量完整列表。
 | `OCG_PID_DIR` | `/tmp/ocg` | PID 文件目录 |
 | `OCG_GATEWAY_URL` | `http://127.0.0.1:55003` | Gateway URL |
 | `OCG_EMBEDDING_URL` | `http://127.0.0.1:50000` | Embedding URL |
-| `OCG_UI_TOKEN` | - | **必需** - Web UI 认证令牌 |
+| `OCG_UI_TOKEN` | - | Web UI 认证令牌（若未设置，启动时会自动生成并保存至 `env.config`） |
+
+---
+
+## 通用 LLM 变量
+
+OCG 支持通用环境变量，适用于所有提供商。当厂商专用变量（如 `OPENAI_API_KEY`）未设置时，系统会自动回退到这些通用变量。这对于使用 OneAPI 等聚合网关非常有用。
+
+| 变量 | 描述 | 默认值 |
+|------|------|--------|
+| `API_KEY` | 通用 API 密钥 | - |
+| `BASE_URL` | 通用 API 基础地址 | - |
+| `MODEL` | 通用模型名称 | - |
 
 ---
 

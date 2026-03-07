@@ -13,7 +13,19 @@ Complete list of OCG environment variables.
 | `OCG_PID_DIR` | `/tmp/ocg` | PID file directory |
 | `OCG_GATEWAY_URL` | `http://127.0.0.1:55003` | Gateway URL |
 | `OCG_EMBEDDING_URL` | `http://127.0.0.1:50000` | Embedding URL |
-| `OCG_UI_TOKEN` | - | **Required** - Web UI auth token |
+| `OCG_UI_TOKEN` | - | Web UI authentication token (Generated automatically and saved to `env.config` if not set) |
+
+---
+
+## Generic LLM Variables
+
+OCG supports generic environment variables that work across all providers. If vendor-specific variables (e.g., `OPENAI_API_KEY`) are not set, the system will fall back to these generic ones. This is ideal for using API proxies or aggregators like OneAPI.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `API_KEY` | Generic API Key | - |
+| `BASE_URL` | Generic API Base URL | - |
+| `MODEL` | Generic Model Name | - |
 
 ---
 
