@@ -122,6 +122,25 @@ func main() {
 		uiToken = envConfig["OCG_UI_TOKEN"]
 	}
 
+	// Generate a random UI token if not set and write it back to env.config
+	if uiToken == "" {
+		// Generate random 32-char token
+		newUIAuthToken := generateRandomToken(32)
+		log.Printf("----------------------------------------------------------------")
+		log.Printf("[SECURITY] OCG_UI_TOKEN not set. Generated a random token:")
+		log.Printf("           %s", newUIAuthToken)
+		log.Printf("           This token has been saved to env.config.")
+		log.Printf("----------------------------------------------------------------")
+
+		// Write to env.config
+		if err := config.MergeEnvConfig(filepath.Join(configDir, "env.config"), map[string]string{
+			"OCG_UI_TOKEN": newUIAuthToken,
+		}); err != nil {
+			log.Printf("[ERROR] failed to save OCG_UI_TOKEN to env.config: %v", err)
+		}
+		uiToken = newUIAuthToken
+	}
+
 	srv := gateway.New(config.GatewayConfig{
 		Host:        host,
 		Port:        p,
@@ -164,4 +183,15 @@ func main() {
 
 	log.Println("Gateway shutting down...")
 	srv.Stop()
+}
+
+func generateRandomToken(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
+		// Add some extra jitter
+		time.Sleep(1 * time.Nanosecond)
+	}
+	return string(b)
 }
