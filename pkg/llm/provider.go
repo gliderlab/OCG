@@ -807,60 +807,85 @@ func ListProviders() []ProviderType {
 // LoadConfigFromEnv loads provider config from environment variables
 func LoadConfigFromEnv(providerType ProviderType) Config {
 	cfg := Config{Type: providerType}
+
+	// 1. Generic fallback - non-vendor specific
+	apiKey := os.Getenv("API_KEY")
+	baseURL := os.Getenv("BASE_URL")
+	model := os.Getenv("MODEL")
+
+	// 2. Specific vendor config with generic fallbacks
 	switch providerType {
 	case ProviderOpenAI:
-		cfg.APIKey = os.Getenv("OPENAI_API_KEY")
-		cfg.BaseURL = getEnvOrDefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
-		cfg.Model = getEnvOrDefault("OPENAI_MODEL", "gpt-4o")
+		cfg.APIKey = getEnvFirst("OPENAI_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("OPENAI_BASE_URL", baseURL, "https://api.openai.com/v1")
+		cfg.Model = getEnvFirst("OPENAI_MODEL", model, "gpt-4o")
 	case ProviderAnthropic:
-		cfg.APIKey = os.Getenv("ANTHROPIC_API_KEY")
-		cfg.BaseURL = getEnvOrDefault("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1")
-		cfg.Model = getEnvOrDefault("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+		cfg.APIKey = getEnvFirst("ANTHROPIC_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("ANTHROPIC_BASE_URL", baseURL, "https://api.anthropic.com/v1")
+		cfg.Model = getEnvFirst("ANTHROPIC_MODEL", model, "claude-3-5-sonnet-20241022")
 	case ProviderGoogle:
-		cfg.APIKey = os.Getenv("GOOGLE_API_KEY")
-		cfg.BaseURL = getEnvOrDefault("GOOGLE_BASE_URL", "https://generativelanguage.googleapis.com/v1")
-		cfg.Model = getEnvOrDefault("GOOGLE_MODEL", "gemini-2.0-flash")
+		cfg.APIKey = getEnvFirst("GOOGLE_API_KEY", "GEMINI_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("GOOGLE_BASE_URL", baseURL, "https://generativelanguage.googleapis.com/v1")
+		cfg.Model = getEnvFirst("GOOGLE_MODEL", model, "gemini-2.0-flash")
 	case ProviderMiniMax:
-		cfg.APIKey = os.Getenv("MINIMAX_API_KEY")
-		cfg.BaseURL = getEnvOrDefault("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
-		cfg.Model = getEnvOrDefault("MINIMAX_MODEL", "MiniMax-M2.1")
+		cfg.APIKey = getEnvFirst("MINIMAX_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("MINIMAX_BASE_URL", baseURL, "https://api.minimax.chat/v1")
+		cfg.Model = getEnvFirst("MINIMAX_MODEL", model, "MiniMax-M2.1")
 	case ProviderOllama:
-		cfg.BaseURL = getEnvOrDefault("OLLAMA_BASE_URL", "http://localhost:11434")
-		cfg.Model = getEnvOrDefault("OLLAMA_MODEL", "llama3")
+		cfg.BaseURL = getEnvFirst("OLLAMA_BASE_URL", baseURL, "http://localhost:11434")
+		cfg.Model = getEnvFirst("OLLAMA_MODEL", model, "llama3")
 	case ProviderCustom:
-		cfg.APIKey = os.Getenv("CUSTOM_API_KEY")
-		cfg.BaseURL = os.Getenv("CUSTOM_BASE_URL")
-		cfg.Model = os.Getenv("CUSTOM_MODEL")
+		cfg.APIKey = getEnvFirst("CUSTOM_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("CUSTOM_BASE_URL", baseURL)
+		cfg.Model = getEnvFirst("CUSTOM_MODEL", model)
 	case ProviderOpenRouter:
-		cfg.APIKey = os.Getenv("OPENROUTER_API_KEY")
-		cfg.BaseURL = getEnvOrDefault("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-		cfg.Model = getEnvOrDefault("OPENROUTER_MODEL", "anthropic/claude-3.5-sonnet")
+		cfg.APIKey = getEnvFirst("OPENROUTER_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("OPENROUTER_BASE_URL", baseURL, "https://openrouter.ai/api/v1")
+		cfg.Model = getEnvFirst("OPENROUTER_MODEL", model, "anthropic/claude-3.5-sonnet")
 	case ProviderBedrock:
-		cfg.APIKey = os.Getenv("AWS_ACCESS_KEY_ID")
-		cfg.BaseURL = os.Getenv("AWS_REGION")
-		cfg.Model = getEnvOrDefault("BEDROCK_MODEL", "anthropic.claude-3-sonnet-20240229-v1:0")
+		cfg.APIKey = getEnvFirst("AWS_ACCESS_KEY_ID", apiKey)
+		cfg.BaseURL = getEnvFirst("AWS_REGION", baseURL)
+		cfg.Model = getEnvFirst("BEDROCK_MODEL", model, "anthropic.claude-3-sonnet-20240229-v1:0")
 	case ProviderMoonshot:
-		cfg.APIKey = os.Getenv("MOONSHOT_API_KEY")
-		cfg.BaseURL = getEnvOrDefault("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")
-		cfg.Model = getEnvOrDefault("MOONSHOT_MODEL", "moonshot-v1-8k")
+		cfg.APIKey = getEnvFirst("MOONSHOT_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("MOONSHOT_BASE_URL", baseURL, "https://api.moonshot.cn/v1")
+		cfg.Model = getEnvFirst("MOONSHOT_MODEL", model, "moonshot-v1-8k")
 	case ProviderGLM:
-		cfg.APIKey = os.Getenv("ZHIPU_API_KEY")
-		cfg.BaseURL = getEnvOrDefault("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
-		cfg.Model = getEnvOrDefault("ZHIPU_MODEL", "glm-4")
+		cfg.APIKey = getEnvFirst("ZHIPU_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("ZHIPU_BASE_URL", baseURL, "https://open.bigmodel.cn/api/paas/v4")
+		cfg.Model = getEnvFirst("ZHIPU_MODEL", model, "glm-4")
 	case ProviderQianfan:
-		cfg.APIKey = os.Getenv("QIANFAN_ACCESS_KEY")
-		cfg.BaseURL = getEnvOrDefault("QIANFAN_BASE_URL", "https://qianfan.baidubce.com/v2")
-		cfg.Model = getEnvOrDefault("QIANFAN_MODEL", "ernie-speed-8k")
+		cfg.APIKey = getEnvFirst("QIANFAN_ACCESS_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("QIANFAN_BASE_URL", baseURL, "https://qianfan.baidubce.com/v2")
+		cfg.Model = getEnvFirst("QIANFAN_MODEL", model, "ernie-speed-8k")
 	case ProviderVercel:
-		cfg.APIKey = os.Getenv("VERCEL_API_TOKEN")
-		cfg.BaseURL = getEnvOrDefault("VERCEL_AI_SDK_BASE_URL", "https://api.vercel.ai/v1")
-		cfg.Model = getEnvOrDefault("VERCEL_MODEL", "gpt-4o")
+		cfg.APIKey = getEnvFirst("VERCEL_API_TOKEN", apiKey)
+		cfg.BaseURL = getEnvFirst("VERCEL_AI_SDK_BASE_URL", baseURL, "https://api.vercel.ai/v1")
+		cfg.Model = getEnvFirst("VERCEL_MODEL", model, "gpt-4o")
 	case ProviderZAi:
-		cfg.APIKey = os.Getenv("ZAI_API_KEY")
-		cfg.BaseURL = getEnvOrDefault("ZAI_BASE_URL", "https://api.ziai.com/v1")
-		cfg.Model = getEnvOrDefault("ZAI_MODEL", "default")
+		cfg.APIKey = getEnvFirst("ZAI_API_KEY", apiKey)
+		cfg.BaseURL = getEnvFirst("ZAI_BASE_URL", baseURL, "https://api.ziai.com/v1")
+		cfg.Model = getEnvFirst("ZAI_MODEL", model, "default")
 	}
 	return cfg
+}
+
+func getEnvFirst(keys ...string) string {
+	for _, key := range keys {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+	}
+	// The last one is the default value (if it's not an env var)
+	if len(keys) > 0 {
+		last := keys[len(keys)-1]
+		// Check if last one is actually an env var that is empty
+		// If it contains dots or slashes or is a URL, it's a default value, not a key
+		if strings.Contains(last, ".") || strings.Contains(last, "/") || strings.Contains(last, ":") || strings.Contains(last, "-") {
+			return last
+		}
+	}
+	return ""
 }
 
 func getEnvOrDefault(key, def string) string {
