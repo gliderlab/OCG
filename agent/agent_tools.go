@@ -142,8 +142,11 @@ func (a *Agent) handleToolCalls(messages []Message, toolCalls []ToolCall, assist
 	}
 	respBytes, _ := json.Marshal(resp)
 
-	if a.cfg.APIKey == "" || depth >= 2 {
+	if a.cfg.APIKey == "" {
 		return string(respBytes)
+	}
+	if depth >= 2 {
+		return summarizeToolResults(results)
 	}
 
 	newMessages := make([]Message, 0, len(messages)+2)
@@ -168,6 +171,30 @@ func (a *Agent) handleToolCalls(messages []Message, toolCalls []ToolCall, assist
 	}
 
 	return a.callAPIWithDepth(newMessages, depth+1)
+}
+
+func summarizeToolResults(results []ToolResult) string {
+	if len(results) == 0 {
+		return "(tool) no results"
+	}
+	parts := make([]string, 0, len(results))
+	for _, tr := range results {
+		m, ok := tr.Result.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if errMsg, ok := m["error"].(string); ok && errMsg != "" {
+			parts = append(parts, "tool error: "+errMsg)
+			continue
+		}
+		if res, ok := m["result"]; ok {
+			parts = append(parts, fmt.Sprintf("%v", res))
+		}
+	}
+	if len(parts) == 0 {
+		return "(tool) completed"
+	}
+	return strings.Join(parts, "\n")
 }
 
 func parseArgs(argsJSON string) map[string]interface{} {
